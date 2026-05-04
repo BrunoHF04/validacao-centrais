@@ -11,7 +11,6 @@ import sys
 import threading
 import tkinter as tk
 import tkinter.filedialog as fd
-import tkinter.ttk as ttk
 from datetime import datetime
 from pathlib import Path
 
@@ -805,151 +804,186 @@ class ValidadorApp(ctk.CTk):
         txt.tag_configure("msg",    foreground="#D4D4D4")
         return txt
 
-    # ── Aba Estrutura (TreeView JSON) ─────────────────────────────────────────
+    # ── Aba Estrutura (Graph canvas — estilo JSON Crack) ──────────────────────
+
+    _CARD_W   = 230   # largura de cada card
+    _CARD_MH  = 26    # altura do cabeçalho do card
+    _ROW_H    = 20    # altura de cada linha de campo
+    _COL_GAP  = 60    # espaço horizontal entre colunas
+    _ROW_GAP  = 10    # espaço vertical entre cards irmãos
 
     def _criar_tree_view(self, parent):
-        style = ttk.Style()
-        try:
-            style.theme_use("default")
-        except Exception:
-            pass
-        style.configure("Json.Treeview",
-            background=COR_BG,
-            foreground=COR_TEXTO,
-            fieldbackground=COR_BG,
-            borderwidth=0,
-            rowheight=22,
-            font=("Consolas", 10),
-        )
-        style.configure("Json.Treeview.Heading",
-            background=COR_CARD,
-            foreground=COR_TITULO,
-            relief="flat",
-            font=("Consolas", 10, "bold"),
-        )
-        style.map("Json.Treeview",
-            background=[("selected", "#3A3A3A")],
-            foreground=[("selected", COR_BORDA)],
-        )
-        style.configure("Json.Vertical.TScrollbar",
-            background=COR_CARD, troughcolor=COR_BG, borderwidth=0, arrowsize=14)
-        style.configure("Json.Horizontal.TScrollbar",
-            background=COR_CARD, troughcolor=COR_BG, borderwidth=0, arrowsize=14)
-
-        wrapper = tk.Frame(parent, bg=COR_BG)
-        wrapper.pack(fill="both", expand=True, padx=4, pady=4)
-
-        self._tree = ttk.Treeview(
-            wrapper,
-            style="Json.Treeview",
-            show="tree headings",
-            columns=("valor",),
-            selectmode="browse",
-        )
-        self._tree.heading("#0", text="Campo", anchor="w")
-        self._tree.heading("valor", text="Valor", anchor="w")
-        self._tree.column("#0", width=220, minwidth=80, stretch=True)
-        self._tree.column("valor", width=340, minwidth=80, stretch=True)
-
-        self._tree.tag_configure("str",       foreground="#CE9178")
-        self._tree.tag_configure("num",       foreground="#B5CEA8")
-        self._tree.tag_configure("bool",      foreground="#569CD6")
-        self._tree.tag_configure("null",      foreground="#808080")
-        self._tree.tag_configure("obj",       foreground=COR_AVISO)
-        self._tree.tag_configure("arr",       foreground=COR_AVISO)
-        self._tree.tag_configure("erro",      foreground=COR_ERRO,
-                                              font=("Consolas", 10, "bold"))
-        self._tree.tag_configure("erro_pai",  foreground="#FF8A80")
-        self._tree.tag_configure("aviso",     foreground=COR_AVISO,
-                                              font=("Consolas", 10, "bold"))
-        self._tree.tag_configure("aviso_pai", foreground="#FFD180")
-
-        vsb = ttk.Scrollbar(wrapper, orient="vertical",
-                             command=self._tree.yview, style="Json.Vertical.TScrollbar")
-        hsb = ttk.Scrollbar(wrapper, orient="horizontal",
-                             command=self._tree.xview, style="Json.Horizontal.TScrollbar")
-        self._tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-
-        vsb.pack(side="right", fill="y")
+        wrapper = tk.Frame(parent, bg="#0D1117")
+        wrapper.pack(fill="both", expand=True)
+        self._canvas = tk.Canvas(wrapper, bg="#0D1117", highlightthickness=0)
+        vsb = tk.Scrollbar(wrapper, orient="vertical",   command=self._canvas.yview)
+        hsb = tk.Scrollbar(wrapper, orient="horizontal", command=self._canvas.xview)
+        self._canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+        vsb.pack(side="right",  fill="y")
         hsb.pack(side="bottom", fill="x")
-        self._tree.pack(fill="both", expand=True)
+        self._canvas.pack(fill="both", expand=True)
+        self._canvas.bind("<MouseWheel>",
+            lambda e: self._canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
+        self._canvas.bind("<Shift-MouseWheel>",
+            lambda e: self._canvas.xview_scroll(-1 if e.delta > 0 else 1, "units"))
 
-    def _popular_tree(self, dados: dict | None):
-        if not hasattr(self, "_tree"):
+    def _popular_tree(self, dados: dict | None,
+                      campos_erro: set | None = None,
+                      campos_aviso: set | None = None):
+        if not hasattr(self, "_canvas"):
             return
-        self._tree.delete(*self._tree.get_children())
-        self._tree_paths = {}
+        self._canvas.delete("all")
         if not dados:
             return
+        ce = campos_erro  or set()
+        ca = campos_aviso or set()
         dados_limpos = {k: v for k, v in dados.items() if not str(k).startswith("_")}
-        self._inserir_no_tree("", "raiz", dados_limpos, "")
-        for child in self._tree.get_children():
-            self._tree.item(child, open=True)
+        root = self._build_json_card("raiz", dados_limpos, "")
+        self._layout_card(root, 16, 16)
+        self._draw_connections(root)
+        self._draw_json_graph(root, ce, ca)
+        self._canvas.update_idletasks()
+        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
 
-    def _inserir_no_tree(self, parent: str, chave, valor, path: str):
-        chave_str = str(chave)
-        if isinstance(valor, dict):
-            resumo = f"{{{len(valor)}}}" if valor else "{}"
-            no = self._tree.insert(parent, "end", text=chave_str,
-                                   values=(resumo,), tags=("obj",))
-            self._tree_paths[no] = path
-            for k, v in valor.items():
-                if str(k).startswith("_"):
-                    continue
-                child_path = f"{path}.{k}" if path else str(k)
-                self._inserir_no_tree(no, k, v, child_path)
-        elif isinstance(valor, list):
-            resumo = f"[{len(valor)}]"
-            no = self._tree.insert(parent, "end", text=chave_str,
-                                   values=(resumo,), tags=("arr",))
-            self._tree_paths[no] = path
-            for i, v in enumerate(valor):
-                child_path = f"{path}[{i}]"
-                self._inserir_no_tree(no, i, v, child_path)
+    # ── Construção dos cards ──────────────────────────────────────────────────
+
+    def _build_json_card(self, key, value, path: str) -> dict:
+        card = {"title": str(key), "path": path,
+                "fields": [], "children": [], "x": 0, "y": 0, "h": 0, "sh": 0}
+        if isinstance(value, dict):
+            items = [(k, v) for k, v in value.items() if not str(k).startswith("_")]
+        elif isinstance(value, list):
+            items = list(enumerate(value))
         else:
-            if isinstance(valor, bool):
-                val_str, tag = ("true" if valor else "false"), "bool"
-            elif valor is None:
-                val_str, tag = "null", "null"
-            elif isinstance(valor, str):
-                val_str, tag = f'"{valor}"', "str"
+            items = []
+
+        for k, v in items:
+            if isinstance(k, int):
+                child_path = f"{path}[{k}]"
             else:
-                val_str, tag = str(valor), "num"
-            no = self._tree.insert(parent, "end", text=chave_str,
-                                   values=(val_str,), tags=(tag,))
-            self._tree_paths[no] = path
+                child_path = f"{path}.{k}" if path else str(k)
 
-    def _destacar_erros_tree(self, campos_erro: set, campos_aviso: set):
-        """Colore em vermelho/amarelo os nós da árvore que têm erro ou aviso."""
-        if not hasattr(self, "_tree") or not self._tree_paths:
-            return
+            if isinstance(v, dict) and v:
+                child = self._build_json_card(k, v, child_path)
+                card["fields"].append((str(k), f"{{{len(v)}}}", "#666666", child))
+                card["children"].append(child)
+            elif isinstance(v, list) and v:
+                child = self._build_json_card(k, v, child_path)
+                card["fields"].append((str(k), f"[{len(v)}]", "#666666", child))
+                card["children"].append(child)
+            else:
+                dv, dc = self._fmt_val(v)
+                card["fields"].append((str(k), dv, dc, None))
 
-        path_para_nos: dict[str, list] = {}
-        for node_id, path in self._tree_paths.items():
-            path_para_nos.setdefault(path, []).append(node_id)
+        card["h"] = self._CARD_MH + max(1, len(card["fields"])) * self._ROW_H + 2
+        return card
 
-        def _marcar(campos: set, tag_no: str, tag_pai: str):
-            for campo in campos:
-                for node_id in path_para_nos.get(campo, []):
-                    self._tree.item(node_id, tags=(tag_no,))
-                    # Expande e marca pais
-                    pai = self._tree.parent(node_id)
-                    while pai:
-                        tags_atuais = self._tree.item(pai, "tags")
-                        if tag_no not in tags_atuais and tag_pai not in tags_atuais:
-                            self._tree.item(pai, tags=(tag_pai,))
-                        self._tree.item(pai, open=True)
-                        pai = self._tree.parent(pai)
+    def _fmt_val(self, v):
+        if isinstance(v, bool):  return ("true" if v else "false"), "#569CD6"
+        if v is None:            return "null", "#808080"
+        if isinstance(v, str):   return f'"{v}"', "#CE9178"
+        return str(v), "#B5CEA8"
 
-        _marcar(campos_aviso, "aviso", "aviso_pai")
-        _marcar(campos_erro,  "erro",  "erro_pai")
+    # ── Layout ────────────────────────────────────────────────────────────────
 
-        # Rola até o primeiro erro
-        for campo in campos_erro:
-            nos = path_para_nos.get(campo, [])
-            if nos:
-                self._tree.see(nos[0])
-                break
+    def _layout_card(self, card: dict, x: int, start_y: int) -> int:
+        card["x"] = x
+        child_x = x + self._CARD_W + self._COL_GAP
+        if not card["children"]:
+            card["y"]  = start_y
+            card["sh"] = card["h"]
+            return card["h"]
+
+        cy = start_y
+        for i, child in enumerate(card["children"]):
+            cy += self._layout_card(child, child_x, cy)
+            if i < len(card["children"]) - 1:
+                cy += self._ROW_GAP
+
+        total = cy - start_y
+        first_mid = card["children"][0]["y"]  + card["children"][0]["h"]  // 2
+        last_mid  = card["children"][-1]["y"] + card["children"][-1]["h"] // 2
+        card["y"]  = max(start_y, (first_mid + last_mid) // 2 - card["h"] // 2)
+        card["sh"] = max(total, card["h"])
+        return card["sh"]
+
+    # ── Desenho ───────────────────────────────────────────────────────────────
+
+    def _draw_json_graph(self, card: dict, ce: set, ca: set):
+        self._draw_one_card(card, ce, ca)
+        for child in card["children"]:
+            self._draw_json_graph(child, ce, ca)
+
+    def _draw_one_card(self, card: dict, ce: set, ca: set):
+        x, y, w = card["x"], card["y"], self._CARD_W
+        path = card["path"]
+        has_e = path in ce
+        has_a = path in ca
+        border = COR_ERRO if has_e else (COR_AVISO if has_a else "#3A3A3A")
+        bw = 2 if (has_e or has_a) else 1
+
+        total_h = card["h"]
+        # Sombra / fundo total
+        self._canvas.create_rectangle(x, y, x + w, y + total_h,
+                                      fill="#161B22", outline=border, width=bw)
+        # Cabeçalho
+        head_fill = "#3D1010" if has_e else ("#2A2200" if has_a else "#21262D")
+        self._canvas.create_rectangle(x + bw - 1, y + bw - 1,
+                                      x + w - bw + 1, y + self._CARD_MH,
+                                      fill=head_fill, outline="")
+        self._canvas.create_line(x + 1, y + self._CARD_MH,
+                                 x + w - 1, y + self._CARD_MH, fill=border)
+        title = card["title"]
+        if len(title) > 24: title = title[:23] + "…"
+        title_c = COR_ERRO if has_e else (COR_AVISO if has_a else "#C8C8C8")
+        self._canvas.create_text(x + 10, y + self._CARD_MH // 2, text=title,
+                                 anchor="w", fill=title_c,
+                                 font=("Consolas", 9, "bold"))
+
+        # Linhas de campo
+        for i, (name, val, color, child_card) in enumerate(card["fields"]):
+            fy = y + self._CARD_MH + i * self._ROW_H
+            field_path = f"{path}.{name}" if path else name
+            if field_path in ce:
+                row_bg, name_c, val_c = "#2D0D0D", COR_ERRO, "#FF8A80"
+            elif field_path in ca:
+                row_bg, name_c, val_c = "#2A2200", COR_AVISO, "#FFD180"
+            else:
+                row_bg  = "#161B22" if i % 2 == 0 else "#1C2128"
+                name_c  = "#9CDCFE"
+                val_c   = color
+
+            self._canvas.create_rectangle(x + 1, fy, x + w - 1, fy + self._ROW_H,
+                                          fill=row_bg, outline="")
+            self._canvas.create_line(x + 1, fy + self._ROW_H,
+                                     x + w - 1, fy + self._ROW_H, fill="#21262D")
+
+            mn = name if len(name) <= 17 else name[:16] + "…"
+            self._canvas.create_text(x + 8, fy + self._ROW_H // 2, text=mn,
+                                     anchor="w", fill=name_c, font=("Consolas", 9))
+            if child_card is None:
+                sv = str(val)
+                sv = sv if len(sv) <= 17 else sv[:16] + "…"
+                self._canvas.create_text(x + w - 8, fy + self._ROW_H // 2, text=sv,
+                                         anchor="e", fill=val_c, font=("Consolas", 9))
+            else:
+                self._canvas.create_text(x + w - 10, fy + self._ROW_H // 2,
+                                         text="›", anchor="e",
+                                         fill="#555555", font=("Consolas", 11))
+
+    def _draw_connections(self, card: dict):
+        for i, (_, __, ___, child_card) in enumerate(card["fields"]):
+            if child_card is None:
+                continue
+            fy = card["y"] + self._CARD_MH + i * self._ROW_H + self._ROW_H // 2
+            fx = card["x"] + self._CARD_W
+            ty = child_card["y"] + child_card["h"] // 2
+            tx = child_card["x"]
+            mx = (fx + tx) // 2
+            self._canvas.create_line(fx, fy, mx, fy, mx, ty, tx, ty,
+                                     fill="#30363D", width=1, smooth=True)
+        for child in card["children"]:
+            self._draw_connections(child)
 
     def _rodape(self):
         rod = ctk.CTkFrame(self, fg_color=COR_CARD, corner_radius=0, height=28)
@@ -1104,7 +1138,8 @@ class ValidadorApp(ctk.CTk):
         for txt in (self._txt_resultado, self._txt_tecnico):
             txt.configure(state="disabled")
         self._dados_atuais = None
-        self._popular_tree(None)
+        if hasattr(self, "_canvas"):
+            self._canvas.delete("all")
 
     def _executar_validacao(self):
         if self._validando:
@@ -1274,10 +1309,9 @@ class ValidadorApp(ctk.CTk):
         self._lbl_resumo_avisos.configure(text=f"  {icone_a}  {len(rel.avisos)} aviso(s)")
         self._lbl_resumo_ok.configure(text=f"  ✔  {len(rel.ok)} campo(s) OK")
 
-        self._popular_tree(self._dados_atuais)
         campos_erro  = {c for c, _ in rel.erros}
         campos_aviso = {c for c, _ in rel.avisos}
-        self._destacar_erros_tree(campos_erro, campos_aviso)
+        self._popular_tree(self._dados_atuais, campos_erro, campos_aviso)
 
         self._btn_validar.configure(text="▶  VALIDAR", state="normal")
         self._validando = False
