@@ -874,6 +874,10 @@ class ValidadorApp(ctk.CTk):
                       font=ctk.CTkFont(size=11), command=self._zoom_reset,
                       **_zb).pack(side="left", padx=2, pady=2)
 
+        ctk.CTkButton(zoom_bar, text="⛶", width=38,
+                      font=ctk.CTkFont(size=15), command=self._abrir_tela_cheia,
+                      **_zb).pack(side="right", padx=(2, 8), pady=2)
+
         self._canvas.pack(fill="both", expand=True)
         self._canvas.bind("<MouseWheel>",
             lambda e: self._canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
@@ -1146,6 +1150,120 @@ class ValidadorApp(ctk.CTk):
             ajuste = min(cw / content_w, ch / content_h)
             self._zoom = max(0.2, min(3.0, round(self._zoom * ajuste, 2)))
         self._redraw_graph()
+
+    def _abrir_tela_cheia(self):
+        if not self._dados_atuais:
+            return
+        if hasattr(self, "_win_fullscreen") and self._win_fullscreen.winfo_exists():
+            self._win_fullscreen.focus()
+            return
+
+        win = ctk.CTkToplevel(self)
+        win.title("Estrutura — Tela Cheia")
+        win.state("zoomed")
+        win.configure(fg_color="#0D1117")
+        win.transient(self)
+        self._win_fullscreen = win
+
+        # Barra superior
+        top = ctk.CTkFrame(win, fg_color=COR_CARD, height=40, corner_radius=0)
+        top.pack(fill="x")
+        top.pack_propagate(False)
+        ctk.CTkLabel(top, text="Estrutura JSON — Tela Cheia",
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color=COR_TITULO).pack(side="left", padx=16)
+        ctk.CTkButton(top, text="✕  Fechar", width=90, height=28,
+                      font=ctk.CTkFont(size=11),
+                      fg_color=COR_BORDA, hover_color="#C0392B",
+                      command=win.destroy).pack(side="right", padx=12, pady=6)
+
+        # Canvas com scrollbars
+        frame = tk.Frame(win, bg="#0D1117")
+        frame.pack(fill="both", expand=True)
+
+        fs_canvas = tk.Canvas(frame, bg="#0D1117", highlightthickness=0)
+        vsb = tk.Scrollbar(frame, orient="vertical",   command=fs_canvas.yview)
+        hsb = tk.Scrollbar(frame, orient="horizontal", command=fs_canvas.xview)
+        fs_canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        # Barra de zoom da tela cheia
+        _zb = dict(height=28, corner_radius=6,
+                   fg_color="#30363D", hover_color="#3D444D", text_color="#C8C8C8")
+        zoom_bar = tk.Frame(frame, bg="#21262D", pady=4)
+        zoom_bar.pack(side="bottom", fill="x")
+        fs_zoom = [1.0]
+        lbl_fs_zoom = ctk.CTkLabel(zoom_bar, text="100%",
+                                   font=ctk.CTkFont(size=11),
+                                   text_color="#888888", width=42)
+
+        def _fs_draw(z=None):
+            if z is not None:
+                fs_zoom[0] = max(0.2, min(3.0, round(z, 2)))
+            lbl_fs_zoom.configure(text=f"{round(fs_zoom[0]*100)}%")
+            fs_canvas.delete("all")
+            ce = getattr(self, "_last_campos_erro",  set())
+            ca = getattr(self, "_last_campos_aviso", set())
+            dados_limpos = {k: v for k, v in self._dados_atuais.items()
+                            if not str(k).startswith("_")}
+            root = self._build_json_card("raiz", dados_limpos, "")
+            self._layout_card(root, 16, 16)
+            # Desenha no canvas da tela cheia com zoom local
+            old_z, self._zoom = self._zoom, fs_zoom[0]
+            old_c, self._canvas = self._canvas, fs_canvas
+            self._draw_connections(root)
+            self._draw_json_graph(root, ce, ca)
+            self._zoom, self._canvas = old_z, old_c
+            fs_canvas.update_idletasks()
+            fs_canvas.configure(scrollregion=fs_canvas.bbox("all"))
+
+        ctk.CTkButton(zoom_bar, text="−", width=38, font=ctk.CTkFont(size=15),
+                      command=lambda: _fs_draw(fs_zoom[0] / 1.25), **_zb
+                      ).pack(side="left", padx=(8,2), pady=2)
+        ctk.CTkButton(zoom_bar, text="+", width=38, font=ctk.CTkFont(size=15),
+                      command=lambda: _fs_draw(fs_zoom[0] * 1.25), **_zb
+                      ).pack(side="left", padx=2, pady=2)
+        lbl_fs_zoom.pack(side="left", padx=4)
+        ctk.CTkButton(zoom_bar, text="⊡", width=38, font=ctk.CTkFont(size=14),
+                      command=lambda: _fs_fit(), **_zb
+                      ).pack(side="left", padx=(8,2), pady=2)
+        ctk.CTkButton(zoom_bar, text="1:1", width=44, font=ctk.CTkFont(size=11),
+                      command=lambda: _fs_draw(1.0), **_zb
+                      ).pack(side="left", padx=2, pady=2)
+
+        def _fs_fit():
+            fs_canvas.update_idletasks()
+            bbox = fs_canvas.bbox("all")
+            if not bbox:
+                return
+            cw = max(1, fs_canvas.winfo_width()  - 20)
+            ch = max(1, fs_canvas.winfo_height() - 20)
+            cw_content = bbox[2] - bbox[0]
+            ch_content = bbox[3] - bbox[1]
+            if cw_content > 0 and ch_content > 0:
+                ajuste = min(cw / cw_content, ch / ch_content)
+                _fs_draw(fs_zoom[0] * ajuste)
+
+        vsb.pack(side="right",  fill="y")
+        hsb.pack(side="bottom", fill="x")
+        fs_canvas.pack(fill="both", expand=True)
+
+        # Pan
+        fs_canvas.bind("<ButtonPress-1>",
+                       lambda e: (fs_canvas.scan_mark(e.x, e.y),
+                                  fs_canvas.configure(cursor="fleur")))
+        fs_canvas.bind("<B1-Motion>",
+                       lambda e: fs_canvas.scan_dragto(e.x, e.y, gain=1))
+        fs_canvas.bind("<ButtonRelease-1>",
+                       lambda e: fs_canvas.configure(cursor=""))
+        fs_canvas.bind("<MouseWheel>",
+                       lambda e: fs_canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
+        fs_canvas.bind("<Shift-MouseWheel>",
+                       lambda e: fs_canvas.xview_scroll(-1 if e.delta > 0 else 1, "units"))
+        fs_canvas.bind("<Control-MouseWheel>",
+                       lambda e: _fs_draw(fs_zoom[0] * 1.25 if e.delta > 0 else fs_zoom[0] / 1.25))
+        win.bind("<Escape>", lambda e: win.destroy())
+
+        win.after(100, _fs_draw)
 
     def _redraw_graph(self):
         if not hasattr(self, "_lbl_zoom"):
