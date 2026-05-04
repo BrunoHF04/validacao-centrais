@@ -820,21 +820,41 @@ def validar_cesdi_json(dados: dict, rel: Relatorio):
         validar_inteiro(dados.get(campo), campo, rel, obrigatorio=True)
 
     # ── Campos de data opcionais ──────────────────────────────────
-    for campo_data in ["dataContrato", "dataCasamento"]:
-        if dados.get(campo_data):
-            validar_data_iso(dados[campo_data], campo_data, rel)
+    if dados.get("dataContrato"):
+        validar_data_iso(dados["dataContrato"], "dataContrato", rel)
+
+    # ── Validações condicionais ao tipoAto ────────────────────────
+    # Atos de casamento (1=Separação, 2=Reconciliação, 3=Conversão, 4=Divórcio Direto):
+    # os campos abaixo são obrigatórios conforme o manual CESDI API
+    TIPOS_CASAMENTO = {1, 2, 3, 4}
+    tipo_ato_cesdi = dados.get("tipoAto")
+    eh_ato_casamento = isinstance(tipo_ato_cesdi, int) and tipo_ato_cesdi in TIPOS_CASAMENTO
+
+    validar_inteiro(dados.get("regimeDeBensDireitosDoCasamento"),
+                    "regimeDeBensDireitosDoCasamento", rel,
+                    obrigatorio=eh_ato_casamento,
+                    valores_validos=tabelas.get("regimeDeBensDireitosDoCasamento"),
+                    nome_tabela="Regime de Bens do Casamento")
+
+    validar_data_iso(dados.get("dataCasamento"), "dataCasamento", rel,
+                     obrigatorio=eh_ato_casamento)
+
+    for campo in ["quantidadefilhosMaiores", "quantidadefilhosMenores"]:
+        v = dados.get(campo)
+        if eh_ato_casamento and v is None:
+            rel.erro(campo, "Campo inteiro obrigatório não informado.")
+        elif v is not None and not isinstance(v, int):
+            rel.aviso(campo, f"Esperado inteiro, recebido {type(v).__name__}: {v!r}")
 
     # ── Campos inteiros opcionais sem domínio ─────────────────────
-    for campo in ["livroFinal", "quantidadefilhosMaiores", "quantidadefilhosMenores"]:
-        v = dados.get(campo)
-        if v is not None and not isinstance(v, int):
-            rel.aviso(campo, f"Esperado inteiro, recebido {type(v).__name__}: {v!r}")
+    v = dados.get("livroFinal")
+    if v is not None and not isinstance(v, int):
+        rel.aviso("livroFinal", f"Esperado inteiro, recebido {type(v).__name__}: {v!r}")
 
     # ── Campos inteiros opcionais com domínio ─────────────────────
     campos_dom_cesdi = [
         ("prazoPagamento",    "prazoPagamento",    "Prazo de Pagamento"),
         ("formaPagamento",    "formaPagamento",    "Forma de Pagamento"),
-        ("regimeDeBensDireitosDoCasamento", "regimeDeBensDireitosDoCasamento", "Regime de Bens do Casamento"),
         ("municipioCartorioAtoOrigem", "municipio", "Município"),
         ("tipoAtoOrigem", "tipoAtoOrigem", "Tipo do Ato de Origem"),
     ]
@@ -846,7 +866,7 @@ def validar_cesdi_json(dados: dict, rel: Relatorio):
                             valores_validos=tab if tab else None,
                             nome_tabela=nome_tab if tab else "")
 
-    # ── existeBemEdireitoVinculadoAoAto: string (0 ou 1 como texto?) ─
+    # ── existeBemEdireitoVinculadoAoAto: string ("0" ou "1") ─────
     v_bem = dados.get("existeBemEdireitoVinculadoAoAto")
     if v_bem is not None and not isinstance(v_bem, str):
         rel.aviso("existeBemEdireitoVinculadoAoAto",
@@ -858,6 +878,18 @@ def validar_cesdi_json(dados: dict, rel: Relatorio):
         if v is not None and not isinstance(v, bool):
             rel.aviso(campo_bool, f"Esperado booleano, recebido: {v!r}")
 
+    # ── cartorio (CNS): obrigatório exceto quando cartorioNaoCadastrado=true ─
+    cartorio_nao_cad = dados.get("cartorioNaoCadastrado")
+    cartorio_val = dados.get("cartorio")
+    if cartorio_nao_cad is not True:
+        if cartorio_val is not None and not isinstance(cartorio_val, str):
+            rel.erro("cartorio", "CNS do cartório deve ser string.")
+        elif (cartorio_val is None or (isinstance(cartorio_val, str) and cartorio_val.strip() == "")):
+            if dados.get("cartorioAtual") is not True:
+                rel.aviso("cartorio",
+                          "CNS do cartório de origem não informado. "
+                          "Preencha ou indique cartorioNaoCadastrado=true.")
+
     # ── Partes ────────────────────────────────────────────────────
     partes = dados.get("partes", [])
     if not isinstance(partes, list):
@@ -866,7 +898,7 @@ def validar_cesdi_json(dados: dict, rel: Relatorio):
         rel.aviso("partes", "Nenhuma parte informada no ato.")
     else:
         for i, parte in enumerate(partes):
-            _validar_parte_cesdi(parte, i, f"partes[{i}]", rel)
+            _validar_parte_cesdi(parte, i, f"partes[{i}]", rel, tipo_ato_cesdi)
 
     # ── Bens e Direitos ───────────────────────────────────────────
     bens = dados.get("bensEdireitos", [])
@@ -883,8 +915,11 @@ def validar_cesdi_json(dados: dict, rel: Relatorio):
                     rel.aviso(f"{prefixo}.{campo}", "Campo de anexo vazio ou ausente.")
 
 
-def _validar_parte_cesdi(parte: dict, idx: int, prefixo: str, rel: Relatorio):
+def _validar_parte_cesdi(parte: dict, idx: int, prefixo: str, rel: Relatorio,
+                         tipo_ato: int | None = None):
     tabelas = TABELAS_CESDI
+    TIPOS_CASAMENTO = {1, 2, 3, 4}
+    eh_ato_casamento = isinstance(tipo_ato, int) and tipo_ato in TIPOS_CASAMENTO
 
     # qualificacaoParte
     validar_inteiro(parte.get("qualificacaoParte"), f"{prefixo}.qualificacaoParte", rel,
@@ -937,11 +972,19 @@ def _validar_parte_cesdi(parte: dict, idx: int, prefixo: str, rel: Relatorio):
                             valores_validos=tab if tab else None,
                             nome_tabela=nome_tab if tab else "")
 
-    # booleans
-    for campo_bool in ["responsavelFilhosMenores", "naoPossuiFiliacao"]:
-        v = parte.get(campo_bool)
-        if v is not None and not isinstance(v, bool):
-            rel.aviso(f"{prefixo}.{campo_bool}", f"Esperado booleano, recebido: {v!r}")
+    # responsavelFilhosMenores: obrigatório para atos de separação/divórcio (tipoAto 1-4)
+    v_resp = parte.get("responsavelFilhosMenores")
+    if eh_ato_casamento and v_resp is None:
+        rel.erro(f"{prefixo}.responsavelFilhosMenores",
+                 "Campo obrigatório para atos de separação/divórcio (tipoAto 1-4).")
+    elif v_resp is not None and not isinstance(v_resp, bool):
+        rel.aviso(f"{prefixo}.responsavelFilhosMenores",
+                  f"Esperado booleano, recebido: {v_resp!r}")
+
+    # naoPossuiFiliacao: boolean opcional
+    v_fil = parte.get("naoPossuiFiliacao")
+    if v_fil is not None and not isinstance(v_fil, bool):
+        rel.aviso(f"{prefixo}.naoPossuiFiliacao", f"Esperado booleano, recebido: {v_fil!r}")
 
     # filiacoes: lista
     filiacoes = parte.get("filiacoes", [])
