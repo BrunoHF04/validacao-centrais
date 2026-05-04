@@ -88,6 +88,40 @@ COR_BORDA   = "#E94560"
 COR_TEXTO   = "#E0E0E0"
 COR_CINZA   = "#666666"
 
+_PALETA_ESCURA = dict(
+    BG="#1A1A1A", PANEL="#222222", CARD="#2C2C2C",
+    TEXTO="#E0E0E0", TITULO="#C8C8C8", CINZA="#666666", INFO="#A0A0A0",
+    SB_BG="#21262D", SB_TROUGH="#0D1117", SB_ACTIVE="#3D444D",
+    CANVAS_BG="#0D1117", TREE_BG="#161B22",
+)
+_PALETA_CLARA = dict(
+    BG="#F0F2F5", PANEL="#FFFFFF", CARD="#E2E6EA",
+    TEXTO="#1A1A1A", TITULO="#2C2C2C", CINZA="#999999", INFO="#5F6368",
+    SB_BG="#D0D4D8", SB_TROUGH="#B8BCC0", SB_ACTIVE="#A8ADB2",
+    CANVAS_BG="#EEF0F3", TREE_BG="#F7F8FA",
+)
+
+
+def _expand_error_paths(paths: set) -> set:
+    """Dado um conjunto de paths de erro, retorna-os mais todos os ancestrais.
+    Ex: {"partes[0].cpf"} → {"partes[0].cpf", "partes[0]", "partes"}
+    Usado para propagar destaque de erros até os cards pai no graph view.
+    """
+    result = set(paths)
+    for path in paths:
+        p = path
+        while p:
+            dot = p.rfind(".")
+            bracket = p.rfind("[")
+            if dot >= 0 and dot > bracket:
+                p = p[:dot]
+            elif bracket >= 0:
+                p = p[:bracket]
+            else:
+                break
+            result.add(p)
+    return result
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TRADUÇÃO DE CAMPOS E MENSAGENS (linguagem amigável ao usuário)
@@ -343,6 +377,9 @@ class ValidadorApp(ctk.CTk):
         self._dados_log_ato: dict | None = None
         self._btn_atos: list = []
 
+        if not hasattr(self, "_tema_claro"):
+            self._tema_claro: bool = False
+
         self._construir_ui()
         self._bind_drag_drop()
 
@@ -381,7 +418,23 @@ class ValidadorApp(ctk.CTk):
             border_width=1,
             border_color=COR_INFO,
             text_color=COR_INFO,
-        ).pack(side="right", padx=20)
+        ).pack(side="right", padx=(4, 20))
+
+        _icone_tema = "☀" if self._tema_claro else "🌙"
+        self._btn_tema = ctk.CTkButton(
+            cabecalho,
+            text=_icone_tema,
+            command=self._alternar_tema,
+            font=ctk.CTkFont(family="Segoe UI", size=15),
+            width=36,
+            height=36,
+            corner_radius=18,
+            fg_color=COR_CARD,
+            hover_color="#3A3A3A",
+            border_width=1,
+            border_color=COR_INFO,
+            text_color=COR_INFO,
+        ).pack(side="right", padx=4)
 
         # ── Corpo ─────────────────────────────────────────────────────────────
         corpo = ctk.CTkFrame(self, fg_color="transparent")
@@ -637,6 +690,61 @@ class ValidadorApp(ctk.CTk):
         for w in (self._lbl_resumo_erros, self._lbl_resumo_avisos, self._lbl_resumo_ok):
             w.pack(side="left", padx=16)
 
+    def _alternar_tema(self):
+        """Alterna entre tema escuro e claro, reconstruindo toda a UI."""
+        global COR_ERRO, COR_AVISO, COR_OK, COR_INFO, COR_TITULO, \
+               COR_BG, COR_PANEL, COR_CARD, COR_BORDA, COR_TEXTO, COR_CINZA
+
+        self._tema_claro = not self._tema_claro
+        p = _PALETA_CLARA if self._tema_claro else _PALETA_ESCURA
+
+        COR_BG    = p["BG"]
+        COR_PANEL = p["PANEL"]
+        COR_CARD  = p["CARD"]
+        COR_TEXTO = p["TEXTO"]
+        COR_TITULO= p["TITULO"]
+        COR_CINZA = p["CINZA"]
+        COR_INFO  = p["INFO"]
+
+        if self._tema_claro:
+            COR_ERRO  = "#C62828"
+            COR_AVISO = "#E65100"
+            COR_OK    = "#2E7D32"
+            ctk.set_appearance_mode("light")
+        else:
+            COR_ERRO  = "#FF5252"
+            COR_AVISO = "#FFB300"
+            COR_OK    = "#4CAF50"
+            ctk.set_appearance_mode("dark")
+
+        # Guarda estado que deve sobreviver ao rebuild
+        tabelas_ok = self._tabelas_carregadas
+
+        # Destrói toda a UI atual
+        for child in self.winfo_children():
+            child.destroy()
+
+        # Reinicia atributos de UI
+        self._arquivo_json     = None
+        self._validando        = False
+        self._dados_atuais     = None
+        self._tree_paths       = {}
+        self._modo_estrutura   = "graph"
+        self._zoom             = 1.0
+        self._atos_log         = []
+        self._arquivo_log      = None
+        self._dados_log_ato    = None
+        self._btn_atos         = []
+        self._tabelas_carregadas = tabelas_ok
+
+        self.configure(fg_color=COR_BG)
+        self._construir_ui()
+        self._bind_drag_drop()
+
+        # Se as tabelas já estavam carregadas, notifica o status imediatamente
+        if tabelas_ok:
+            self.after(150, self._on_tabelas_ok)
+
     def _abrir_ajuda(self):
         """Abre janela modal com informações sobre o sistema e instruções de uso."""
         if hasattr(self, "_janela_ajuda") and self._janela_ajuda.winfo_exists():
@@ -842,19 +950,31 @@ class ValidadorApp(ctk.CTk):
         self._frame_graph = tk.Frame(parent, bg="#0D1117")
         self._frame_graph.pack(fill="both", expand=True)
 
-        self._canvas = tk.Canvas(self._frame_graph, bg="#0D1117", highlightthickness=0)
-        vsb_g = tk.Scrollbar(self._frame_graph, orient="vertical",   command=self._canvas.yview)
-        hsb_g = tk.Scrollbar(self._frame_graph, orient="horizontal", command=self._canvas.xview)
+        _pal = _PALETA_CLARA if self._tema_claro else _PALETA_ESCURA
+        _canvas_bg = _pal["CANVAS_BG"]
+        _sb = dict(bg=_pal["SB_BG"], troughcolor=_pal["SB_TROUGH"],
+                   activebackground=_pal["SB_ACTIVE"],
+                   width=8, bd=0, relief="flat", highlightthickness=0,
+                   elementborderwidth=0)
+
+        self._frame_graph.configure(bg=_canvas_bg)
+        self._canvas = tk.Canvas(self._frame_graph, bg=_canvas_bg, highlightthickness=0)
+        vsb_g = tk.Scrollbar(self._frame_graph, orient="vertical",   command=self._canvas.yview, **_sb)
+        hsb_g = tk.Scrollbar(self._frame_graph, orient="horizontal", command=self._canvas.xview, **_sb)
         self._canvas.configure(yscrollcommand=vsb_g.set, xscrollcommand=hsb_g.set)
         vsb_g.pack(side="right",  fill="y")
         hsb_g.pack(side="bottom", fill="x")
 
         # ── Barra de zoom (flutuante no rodapé do canvas) ─────────────────────
-        zoom_bar = tk.Frame(self._frame_graph, bg="#21262D", pady=4)
+        _zbar_bg  = _pal["SB_BG"]
+        _zbar_btn = _pal["CARD"]
+        _zbar_hov = _pal["PANEL"]
+        _zbar_txt = _pal["TITULO"]
+        zoom_bar = tk.Frame(self._frame_graph, bg=_zbar_bg, pady=4)
         zoom_bar.pack(side="bottom", fill="x")
 
         _zb = dict(height=28, corner_radius=6,
-                   fg_color="#30363D", hover_color="#3D444D", text_color="#C8C8C8")
+                   fg_color=_zbar_btn, hover_color=_zbar_hov, text_color=_zbar_txt)
         ctk.CTkButton(zoom_bar, text="−", width=38,
                       font=ctk.CTkFont(size=15), command=self._zoom_out,
                       **_zb).pack(side="left", padx=(8, 2), pady=2)
@@ -864,7 +984,7 @@ class ValidadorApp(ctk.CTk):
 
         self._lbl_zoom = ctk.CTkLabel(zoom_bar, text="100%",
                                       font=ctk.CTkFont(size=11),
-                                      text_color="#888888", width=42)
+                                      text_color=_pal["CINZA"], width=42)
         self._lbl_zoom.pack(side="left", padx=4)
 
         ctk.CTkButton(zoom_bar, text="⊡", width=38,
@@ -890,6 +1010,7 @@ class ValidadorApp(ctk.CTk):
         self._canvas.bind("<ButtonRelease-1>", self._pan_end)
 
         # ── Frame do Tree (treeview ttk) ──────────────────────────────────────
+        _tree_bg = _pal["TREE_BG"]
         self._frame_tree = tk.Frame(parent, bg=COR_BG)
 
         style = ttk.Style()
@@ -898,16 +1019,17 @@ class ValidadorApp(ctk.CTk):
         except Exception:
             pass
         style.configure("Json.Treeview",
-            background="#161B22", foreground=COR_TEXTO,
-            fieldbackground="#161B22", borderwidth=0,
+            background=_tree_bg, foreground=COR_TEXTO,
+            fieldbackground=_tree_bg, borderwidth=0,
             rowheight=22, font=("Consolas", 10),
         )
         style.configure("Json.Treeview.Heading",
             background=COR_CARD, foreground=COR_TITULO,
             relief="flat", font=("Consolas", 10, "bold"),
         )
+        _sel_bg = "#BFCDE0" if self._tema_claro else "#3A3A3A"
         style.map("Json.Treeview",
-            background=[("selected", "#3A3A3A")],
+            background=[("selected", _sel_bg)],
             foreground=[("selected", COR_BORDA)],
         )
 
@@ -920,10 +1042,13 @@ class ValidadorApp(ctk.CTk):
         self._treeview.column("#0",    width=220, minwidth=80, stretch=True)
         self._treeview.column("valor", width=340, minwidth=80, stretch=True)
 
+        _str_cor  = "#8B4513" if self._tema_claro else "#CE9178"
+        _num_cor  = "#2E7D32" if self._tema_claro else "#B5CEA8"
+        _bool_cor = "#1565C0" if self._tema_claro else "#569CD6"
         for tag, fg, font in [
-            ("str",      "#CE9178", ("Consolas", 10)),
-            ("num",      "#B5CEA8", ("Consolas", 10)),
-            ("bool",     "#569CD6", ("Consolas", 10)),
+            ("str",      _str_cor,  ("Consolas", 10)),
+            ("num",      _num_cor,  ("Consolas", 10)),
+            ("bool",     _bool_cor, ("Consolas", 10)),
             ("null",     "#808080", ("Consolas", 10)),
             ("obj",      COR_AVISO, ("Consolas", 10)),
             ("arr",      COR_AVISO, ("Consolas", 10)),
@@ -934,8 +1059,8 @@ class ValidadorApp(ctk.CTk):
         ]:
             self._treeview.tag_configure(tag, foreground=fg, font=font)
 
-        vsb_t = tk.Scrollbar(self._frame_tree, orient="vertical",   command=self._treeview.yview)
-        hsb_t = tk.Scrollbar(self._frame_tree, orient="horizontal", command=self._treeview.xview)
+        vsb_t = tk.Scrollbar(self._frame_tree, orient="vertical",   command=self._treeview.yview, **_sb)
+        hsb_t = tk.Scrollbar(self._frame_tree, orient="horizontal", command=self._treeview.xview, **_sb)
         self._treeview.configure(yscrollcommand=vsb_t.set, xscrollcommand=hsb_t.set)
         vsb_t.pack(side="right",  fill="y")
         hsb_t.pack(side="bottom", fill="x")
@@ -958,8 +1083,10 @@ class ValidadorApp(ctk.CTk):
             dados_limpos = {k: v for k, v in dados.items() if not str(k).startswith("_")}
             root = self._build_json_card("raiz", dados_limpos, "")
             self._layout_card(root, 16, 16)
+            ce_all = _expand_error_paths(ce)
+            ca_all = _expand_error_paths(ca)
             self._draw_connections(root)
-            self._draw_json_graph(root, ce, ca)
+            self._draw_json_graph(root, ce, ca, ce_all, ca_all)
             self._canvas.update_idletasks()
             self._canvas.configure(scrollregion=self._canvas.bbox("all"))
         else:
@@ -1032,12 +1159,14 @@ class ValidadorApp(ctk.CTk):
 
     # ── Desenho ───────────────────────────────────────────────────────────────
 
-    def _draw_json_graph(self, card: dict, ce: set, ca: set):
-        self._draw_one_card(card, ce, ca)
+    def _draw_json_graph(self, card: dict, ce: set, ca: set,
+                          ce_all: set, ca_all: set):
+        self._draw_one_card(card, ce, ca, ce_all, ca_all)
         for child in card["children"]:
-            self._draw_json_graph(child, ce, ca)
+            self._draw_json_graph(child, ce, ca, ce_all, ca_all)
 
-    def _draw_one_card(self, card: dict, ce: set, ca: set):
+    def _draw_one_card(self, card: dict, ce: set, ca: set,
+                        ce_all: set, ca_all: set):
         z  = self._zoom
         x  = card["x"] * z
         y  = card["y"] * z
@@ -1046,33 +1175,64 @@ class ValidadorApp(ctk.CTk):
         rh = self._ROW_H   * z
         fs = max(6, round(9 * z))
 
-        path  = card["path"]
-        has_e = path in ce
-        has_a = path in ca
-        border = COR_ERRO if has_e else (COR_AVISO if has_a else "#3A3A3A")
-        bw = 2 if (has_e or has_a) else 1
+        path = card["path"]
+
+        # Destaque do card: erro/aviso direto ou em qualquer descendente
+        has_e_direct = path in ce
+        has_a_direct = path in ca
+        has_e = path in ce_all
+        has_a = path in ca_all and not has_e
+
+        if has_e_direct:
+            border, bw = COR_ERRO, 2
+            head_fill  = "#3D1010"
+            title_c    = COR_ERRO
+        elif has_a_direct:
+            border, bw = COR_AVISO, 2
+            head_fill  = "#2A2200"
+            title_c    = COR_AVISO
+        elif has_e:
+            border, bw = "#882222", 2
+            head_fill  = "#280808"
+            title_c    = "#CC5555"
+        elif has_a:
+            border, bw = "#885500", 2
+            head_fill  = "#231800"
+            title_c    = "#CC8800"
+        else:
+            border, bw = "#3A3A3A", 1
+            head_fill  = "#21262D"
+            title_c    = "#C8C8C8"
 
         self._canvas.create_rectangle(x, y, x + w, y + card["h"] * z,
                                       fill="#161B22", outline=border, width=bw)
-        head_fill = "#3D1010" if has_e else ("#2A2200" if has_a else "#21262D")
         self._canvas.create_rectangle(x + bw - 1, y + bw - 1,
                                       x + w - bw + 1, y + mh,
                                       fill=head_fill, outline="")
         self._canvas.create_line(x + 1, y + mh, x + w - 1, y + mh, fill=border)
-        title   = card["title"]
+        title = card["title"]
         if len(title) > 24: title = title[:23] + "…"
-        title_c = COR_ERRO if has_e else (COR_AVISO if has_a else "#C8C8C8")
         self._canvas.create_text(x + 10 * z, y + mh / 2, text=title,
                                  anchor="w", fill=title_c,
                                  font=("Consolas", fs, "bold"))
 
         for i, (name, val, color, child_card) in enumerate(card["fields"]):
             fy = y + mh + i * rh
-            field_path = f"{path}.{name}" if path else name
+            # Corrige formato de path: índices de lista usam [n] não .n
+            if name.isdigit():
+                field_path = f"{path}[{name}]"
+            else:
+                field_path = f"{path}.{name}" if path else name
+
             if field_path in ce:
                 row_bg, name_c, val_c = "#2D0D0D", COR_ERRO, "#FF8A80"
             elif field_path in ca:
                 row_bg, name_c, val_c = "#2A2200", COR_AVISO, "#FFD180"
+            elif field_path in ce_all:
+                # Campo aponta para filho que tem erro — tinte sutil
+                row_bg, name_c, val_c = "#1E0A0A", "#AA3333", color
+            elif field_path in ca_all:
+                row_bg, name_c, val_c = "#1A1200", "#997700", color
             else:
                 row_bg = "#161B22" if i % 2 == 0 else "#1C2128"
                 name_c, val_c = "#9CDCFE", color
@@ -1090,8 +1250,10 @@ class ValidadorApp(ctk.CTk):
                 self._canvas.create_text(x + w - 8 * z, fy + rh / 2, text=sv,
                                          anchor="e", fill=val_c, font=("Consolas", fs))
             else:
+                arrow_c = "#AA3333" if field_path in ce_all else (
+                          "#997700" if field_path in ca_all else "#555555")
                 self._canvas.create_text(x + w - 10 * z, fy + rh / 2,
-                                         text="›", anchor="e", fill="#555555",
+                                         text="›", anchor="e", fill=arrow_c,
                                          font=("Consolas", max(8, round(11 * z))))
 
     def _draw_connections(self, card: dict):
@@ -1161,7 +1323,8 @@ class ValidadorApp(ctk.CTk):
         win = ctk.CTkToplevel(self)
         win.title("Estrutura — Tela Cheia")
         win.state("zoomed")
-        win.configure(fg_color="#0D1117")
+        _pal_fs = _PALETA_CLARA if self._tema_claro else _PALETA_ESCURA
+        win.configure(fg_color=_pal_fs["CANVAS_BG"])
         win.transient(self)
         self._win_fullscreen = win
 
@@ -1178,23 +1341,28 @@ class ValidadorApp(ctk.CTk):
                       command=win.destroy).pack(side="right", padx=12, pady=6)
 
         # Canvas com scrollbars
-        frame = tk.Frame(win, bg="#0D1117")
+        frame = tk.Frame(win, bg=_pal_fs["CANVAS_BG"])
         frame.pack(fill="both", expand=True)
 
-        fs_canvas = tk.Canvas(frame, bg="#0D1117", highlightthickness=0)
-        vsb = tk.Scrollbar(frame, orient="vertical",   command=fs_canvas.yview)
-        hsb = tk.Scrollbar(frame, orient="horizontal", command=fs_canvas.xview)
+        _sb_fs = dict(bg=_pal_fs["SB_BG"], troughcolor=_pal_fs["SB_TROUGH"],
+                      activebackground=_pal_fs["SB_ACTIVE"],
+                      width=8, bd=0, relief="flat", highlightthickness=0,
+                      elementborderwidth=0)
+        fs_canvas = tk.Canvas(frame, bg=_pal_fs["CANVAS_BG"], highlightthickness=0)
+        vsb = tk.Scrollbar(frame, orient="vertical",   command=fs_canvas.yview, **_sb_fs)
+        hsb = tk.Scrollbar(frame, orient="horizontal", command=fs_canvas.xview, **_sb_fs)
         fs_canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
         # Barra de zoom da tela cheia
         _zb = dict(height=28, corner_radius=6,
-                   fg_color="#30363D", hover_color="#3D444D", text_color="#C8C8C8")
-        zoom_bar = tk.Frame(frame, bg="#21262D", pady=4)
+                   fg_color=_pal_fs["CARD"], hover_color=_pal_fs["PANEL"],
+                   text_color=_pal_fs["TITULO"])
+        zoom_bar = tk.Frame(frame, bg=_pal_fs["SB_BG"], pady=4)
         zoom_bar.pack(side="bottom", fill="x")
         fs_zoom = [1.0]
         lbl_fs_zoom = ctk.CTkLabel(zoom_bar, text="100%",
                                    font=ctk.CTkFont(size=11),
-                                   text_color="#888888", width=42)
+                                   text_color=_pal_fs["CINZA"], width=42)
 
         def _fs_draw(z=None):
             if z is not None:
@@ -1207,11 +1375,13 @@ class ValidadorApp(ctk.CTk):
                             if not str(k).startswith("_")}
             root = self._build_json_card("raiz", dados_limpos, "")
             self._layout_card(root, 16, 16)
+            ce_all = _expand_error_paths(ce)
+            ca_all = _expand_error_paths(ca)
             # Desenha no canvas da tela cheia com zoom local
             old_z, self._zoom = self._zoom, fs_zoom[0]
             old_c, self._canvas = self._canvas, fs_canvas
             self._draw_connections(root)
-            self._draw_json_graph(root, ce, ca)
+            self._draw_json_graph(root, ce, ca, ce_all, ca_all)
             self._zoom, self._canvas = old_z, old_c
             fs_canvas.update_idletasks()
             fs_canvas.configure(scrollregion=fs_canvas.bbox("all"))

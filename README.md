@@ -11,6 +11,9 @@ Ferramenta local para validação de arquivos JSON enviados aos sistemas **CEP**
 - Garante que **CPF, CNPJ, CNS e CEP sejam tratados como strings** (preserva zeros à esquerda)
 - Gera relatório detalhado em português com destaque por tipo de problema
 - Disponível como **interface gráfica (GUI)** e **linha de comando (CLI)**
+- **Importação de arquivo de log** do Orion/SIGNO com extração automática dos atos JSON
+- **Visualizador de estrutura JSON** com dois modos: Graph (canvas interativo) e Tree (árvore hierárquica)
+- **Tema claro e escuro** com alternância em tempo real
 
 ---
 
@@ -18,7 +21,7 @@ Ferramenta local para validação de arquivos JSON enviados aos sistemas **CEP**
 
 ```
 validador-centrais/
-├── validador_gui.py          # Interface gráfica (tema escuro moderno)
+├── validador_gui.py          # Interface gráfica (tema escuro/claro moderno)
 ├── validador_signo.py        # Motor de validação — também funciona via CLI
 ├── build_exe.bat             # Gera o executável .exe (PyInstaller)
 ├── requirements.txt          # Dependências Python
@@ -81,6 +84,51 @@ O script retorna **exit code 0** se válido e **1** se houver erros — útil pa
 
 ---
 
+## Importação de Arquivo de Log
+
+O sistema pode ler diretamente o arquivo de log gerado pelo Orion/SIGNO (`wsOrionSigno.log`), sem precisar copiar e colar JSON manualmente.
+
+1. Clique em **Importar Log...** no painel esquerdo
+2. Selecione o arquivo `.log`
+3. O sistema extrai automaticamente todos os atos (JSON `jsonEntrada`) presentes no log
+4. Os atos são listados por **Livro e Folha** e deduplicados automaticamente
+5. Clique em qualquer ato da lista para validá-lo instantaneamente
+
+---
+
+## Visualizador de Estrutura JSON
+
+A aba **Estrutura** exibe visualmente o JSON validado. Há dois modos de visualização:
+
+### Modo Graph (padrão)
+- Cards conectados por linhas, estilo JSON Crack
+- **Erros em vermelho** — card com borda vermelha, cabeçalho tingido e campo destacado
+- **Avisos em laranja** — mesma lógica com cor laranja
+- **Propagação visual** — cards ancestrais de um erro ficam com borda vermelha fraca, indicando que há um problema dentro deles
+- **Zoom**: botões `−` / `+` / `⊡ Fit` / `1:1` ou `Ctrl + Scroll`
+- **Pan**: clique e arraste para navegar pelo canvas
+- **Tela cheia**: botão `⛶` abre visualização maximizada com controles independentes
+
+### Modo Tree
+- Árvore hierárquica com campos e valores
+- Campos com erro destacados em **vermelho negrito**
+- Campos com aviso destacados em **laranja negrito**
+- Nós ancestrais marcados para facilitar a localização do problema
+
+---
+
+## Interface e Temas
+
+| Elemento | Descrição |
+|---|---|
+| Botão `🌙 / ☀` | Alterna entre tema escuro e claro (ao lado do botão `?`) |
+| Scrollbars | Estilo compacto e escuro (8 px), adaptadas ao tema ativo |
+| Painel esquerdo | Sistema, arquivo JSON e lista de atos do log |
+| Painel direito | Abas Simplificado, Técnico e Estrutura |
+| Barra de status | Contagem de erros, avisos e campos OK |
+
+---
+
 ## Instalação das dependências
 
 ```bash
@@ -91,7 +139,7 @@ pip install -r requirements.txt
 |---|---|
 | `pandas` | Leitura dos arquivos CSV de manuais |
 | `openpyxl` | Leitura do XLSX do manual CESDI |
-| `customtkinter` | Interface gráfica moderna (tema escuro) |
+| `customtkinter` | Interface gráfica moderna (tema escuro/claro) |
 | `pyinstaller` | Geração do executável `.exe` |
 
 ---
