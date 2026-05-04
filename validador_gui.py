@@ -853,28 +853,26 @@ class ValidadorApp(ctk.CTk):
         zoom_bar = tk.Frame(self._frame_graph, bg="#21262D", pady=4)
         zoom_bar.pack(side="bottom", fill="x")
 
-        _zoom_btn_cfg = dict(
-            width=38, height=28, corner_radius=6,
-            fg_color="#30363D", hover_color="#3D444D",
-            text_color="#C8C8C8", font=ctk.CTkFont(size=13),
-        )
-        ctk.CTkButton(zoom_bar, text="−", **_zoom_btn_cfg,
-                      command=self._zoom_out).pack(side="left", padx=(8, 2), pady=2)
-        ctk.CTkButton(zoom_bar, text="+", **_zoom_btn_cfg,
-                      command=self._zoom_in).pack(side="left", padx=2, pady=2)
+        _zb = dict(height=28, corner_radius=6,
+                   fg_color="#30363D", hover_color="#3D444D", text_color="#C8C8C8")
+        ctk.CTkButton(zoom_bar, text="−", width=38,
+                      font=ctk.CTkFont(size=15), command=self._zoom_out,
+                      **_zb).pack(side="left", padx=(8, 2), pady=2)
+        ctk.CTkButton(zoom_bar, text="+", width=38,
+                      font=ctk.CTkFont(size=15), command=self._zoom_in,
+                      **_zb).pack(side="left", padx=2, pady=2)
 
         self._lbl_zoom = ctk.CTkLabel(zoom_bar, text="100%",
                                       font=ctk.CTkFont(size=11),
                                       text_color="#888888", width=42)
         self._lbl_zoom.pack(side="left", padx=4)
 
-        ctk.CTkButton(zoom_bar, text="⊡", **_zoom_btn_cfg,
-                      command=self._zoom_fit,
-                      font=ctk.CTkFont(size=14)).pack(side="left", padx=(8, 2), pady=2)
-        ctk.CTkButton(zoom_bar, text="1:1", width=44, height=28, corner_radius=6,
-                      fg_color="#30363D", hover_color="#3D444D",
-                      text_color="#C8C8C8", font=ctk.CTkFont(size=11),
-                      command=self._zoom_reset).pack(side="left", padx=2, pady=2)
+        ctk.CTkButton(zoom_bar, text="⊡", width=38,
+                      font=ctk.CTkFont(size=14), command=self._zoom_fit,
+                      **_zb).pack(side="left", padx=(8, 2), pady=2)
+        ctk.CTkButton(zoom_bar, text="1:1", width=44,
+                      font=ctk.CTkFont(size=11), command=self._zoom_reset,
+                      **_zb).pack(side="left", padx=2, pady=2)
 
         self._canvas.pack(fill="both", expand=True)
         self._canvas.bind("<MouseWheel>",
