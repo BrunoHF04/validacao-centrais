@@ -881,6 +881,9 @@ class ValidadorApp(ctk.CTk):
             lambda e: self._canvas.xview_scroll(-1 if e.delta > 0 else 1, "units"))
         self._canvas.bind("<Control-MouseWheel>",
             lambda e: self._zoom_in() if e.delta > 0 else self._zoom_out())
+        self._canvas.bind("<ButtonPress-1>",   self._pan_start)
+        self._canvas.bind("<B1-Motion>",       self._pan_move)
+        self._canvas.bind("<ButtonRelease-1>", self._pan_end)
 
         # ── Frame do Tree (treeview ttk) ──────────────────────────────────────
         self._frame_tree = tk.Frame(parent, bg=COR_BG)
@@ -1101,6 +1104,18 @@ class ValidadorApp(ctk.CTk):
                                      fill="#30363D", width=1, smooth=True)
         for child in card["children"]:
             self._draw_connections(child)
+
+    # ── Pan (arrastar canvas) ─────────────────────────────────────────────────
+
+    def _pan_start(self, event):
+        self._canvas.scan_mark(event.x, event.y)
+        self._canvas.configure(cursor="fleur")
+
+    def _pan_move(self, event):
+        self._canvas.scan_dragto(event.x, event.y, gain=1)
+
+    def _pan_end(self, event):
+        self._canvas.configure(cursor="")
 
     # ── Controles de zoom ─────────────────────────────────────────────────────
 
