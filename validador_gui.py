@@ -399,7 +399,7 @@ class ValidadorApp(ctk.CTk):
 
         self._lbl_drop = ctk.CTkLabel(
             self._zona_drop,
-            text="Arraste o JSON aqui\nou clique em Procurar",
+            text="",
             font=ctk.CTkFont(size=11),
             text_color=COR_CINZA,
             justify="center",
@@ -761,7 +761,7 @@ class ValidadorApp(ctk.CTk):
         self._arquivo_json = None
         self._lbl_arquivo.configure(text="Nenhum arquivo selecionado", text_color=COR_CINZA)
         self._lbl_drop.configure(
-            text="Arraste o JSON aqui\nou clique em Procurar",
+            text="",
             text_color=COR_CINZA,
             font=ctk.CTkFont(size=11),
         )
