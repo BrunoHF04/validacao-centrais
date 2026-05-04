@@ -333,6 +333,7 @@ class ValidadorApp(ctk.CTk):
         self._arquivo_json: Path | None = None
         self._validando = False
         self._dados_atuais: dict | None = None
+        self._tree_paths: dict = {}
 
         # ── Estado do modo log ────────────────────────────────────────────────
         self._atos_log: list = []
@@ -850,12 +851,18 @@ class ValidadorApp(ctk.CTk):
         self._tree.column("#0", width=220, minwidth=80, stretch=True)
         self._tree.column("valor", width=340, minwidth=80, stretch=True)
 
-        self._tree.tag_configure("str",  foreground="#CE9178")
-        self._tree.tag_configure("num",  foreground="#B5CEA8")
-        self._tree.tag_configure("bool", foreground="#569CD6")
-        self._tree.tag_configure("null", foreground="#808080")
-        self._tree.tag_configure("obj",  foreground=COR_AVISO)
-        self._tree.tag_configure("arr",  foreground=COR_AVISO)
+        self._tree.tag_configure("str",       foreground="#CE9178")
+        self._tree.tag_configure("num",       foreground="#B5CEA8")
+        self._tree.tag_configure("bool",      foreground="#569CD6")
+        self._tree.tag_configure("null",      foreground="#808080")
+        self._tree.tag_configure("obj",       foreground=COR_AVISO)
+        self._tree.tag_configure("arr",       foreground=COR_AVISO)
+        self._tree.tag_configure("erro",      foreground=COR_ERRO,
+                                              font=("Consolas", 10, "bold"))
+        self._tree.tag_configure("erro_pai",  foreground="#FF8A80")
+        self._tree.tag_configure("aviso",     foreground=COR_AVISO,
+                                              font=("Consolas", 10, "bold"))
+        self._tree.tag_configure("aviso_pai", foreground="#FFD180")
 
         vsb = ttk.Scrollbar(wrapper, orient="vertical",
                              command=self._tree.yview, style="Json.Vertical.TScrollbar")
@@ -871,29 +878,34 @@ class ValidadorApp(ctk.CTk):
         if not hasattr(self, "_tree"):
             return
         self._tree.delete(*self._tree.get_children())
+        self._tree_paths = {}
         if not dados:
             return
         dados_limpos = {k: v for k, v in dados.items() if not str(k).startswith("_")}
-        self._inserir_no_tree("", "raiz", dados_limpos)
+        self._inserir_no_tree("", "raiz", dados_limpos, "")
         for child in self._tree.get_children():
             self._tree.item(child, open=True)
 
-    def _inserir_no_tree(self, parent: str, chave, valor):
+    def _inserir_no_tree(self, parent: str, chave, valor, path: str):
         chave_str = str(chave)
         if isinstance(valor, dict):
             resumo = f"{{{len(valor)}}}" if valor else "{}"
             no = self._tree.insert(parent, "end", text=chave_str,
                                    values=(resumo,), tags=("obj",))
+            self._tree_paths[no] = path
             for k, v in valor.items():
                 if str(k).startswith("_"):
                     continue
-                self._inserir_no_tree(no, k, v)
+                child_path = f"{path}.{k}" if path else str(k)
+                self._inserir_no_tree(no, k, v, child_path)
         elif isinstance(valor, list):
             resumo = f"[{len(valor)}]"
             no = self._tree.insert(parent, "end", text=chave_str,
                                    values=(resumo,), tags=("arr",))
+            self._tree_paths[no] = path
             for i, v in enumerate(valor):
-                self._inserir_no_tree(no, i, v)
+                child_path = f"{path}[{i}]"
+                self._inserir_no_tree(no, i, v, child_path)
         else:
             if isinstance(valor, bool):
                 val_str, tag = ("true" if valor else "false"), "bool"
@@ -903,8 +915,41 @@ class ValidadorApp(ctk.CTk):
                 val_str, tag = f'"{valor}"', "str"
             else:
                 val_str, tag = str(valor), "num"
-            self._tree.insert(parent, "end", text=chave_str,
-                              values=(val_str,), tags=(tag,))
+            no = self._tree.insert(parent, "end", text=chave_str,
+                                   values=(val_str,), tags=(tag,))
+            self._tree_paths[no] = path
+
+    def _destacar_erros_tree(self, campos_erro: set, campos_aviso: set):
+        """Colore em vermelho/amarelo os nós da árvore que têm erro ou aviso."""
+        if not hasattr(self, "_tree") or not self._tree_paths:
+            return
+
+        path_para_nos: dict[str, list] = {}
+        for node_id, path in self._tree_paths.items():
+            path_para_nos.setdefault(path, []).append(node_id)
+
+        def _marcar(campos: set, tag_no: str, tag_pai: str):
+            for campo in campos:
+                for node_id in path_para_nos.get(campo, []):
+                    self._tree.item(node_id, tags=(tag_no,))
+                    # Expande e marca pais
+                    pai = self._tree.parent(node_id)
+                    while pai:
+                        tags_atuais = self._tree.item(pai, "tags")
+                        if tag_no not in tags_atuais and tag_pai not in tags_atuais:
+                            self._tree.item(pai, tags=(tag_pai,))
+                        self._tree.item(pai, open=True)
+                        pai = self._tree.parent(pai)
+
+        _marcar(campos_aviso, "aviso", "aviso_pai")
+        _marcar(campos_erro,  "erro",  "erro_pai")
+
+        # Rola até o primeiro erro
+        for campo in campos_erro:
+            nos = path_para_nos.get(campo, [])
+            if nos:
+                self._tree.see(nos[0])
+                break
 
     def _rodape(self):
         rod = ctk.CTkFrame(self, fg_color=COR_CARD, corner_radius=0, height=28)
@@ -1230,6 +1275,9 @@ class ValidadorApp(ctk.CTk):
         self._lbl_resumo_ok.configure(text=f"  ✔  {len(rel.ok)} campo(s) OK")
 
         self._popular_tree(self._dados_atuais)
+        campos_erro  = {c for c, _ in rel.erros}
+        campos_aviso = {c for c, _ in rel.avisos}
+        self._destacar_erros_tree(campos_erro, campos_aviso)
 
         self._btn_validar.configure(text="▶  VALIDAR", state="normal")
         self._validando = False
