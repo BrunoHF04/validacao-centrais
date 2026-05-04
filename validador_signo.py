@@ -147,35 +147,95 @@ def carregar_tabelas_cesdi_xlsx(caminho: Path) -> dict:
 TABELAS_CEP = {}
 TABELAS_CESDI = {}
 
+def _carregar_aba_xlsx(caminho: Path, nome_aba: str, col_cod: int = 0, col_desc: int = 1) -> dict:
+    """Lê uma aba de XLSX e retorna {str(código): descrição}. Pula linha de cabeçalho."""
+    resultado = {}
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(caminho, data_only=True)
+        ws = wb[nome_aba]
+        rows = list(ws.iter_rows(values_only=True))
+        for row in rows[1:]:  # pula cabeçalho
+            if not row or len(row) <= max(col_cod, col_desc):
+                continue
+            cod  = row[col_cod]
+            desc = row[col_desc]
+            if cod is None:
+                continue
+            cod_str = str(int(cod)) if isinstance(cod, float) else str(cod).strip()
+            if re.match(r"^\d+$", cod_str):
+                resultado[cod_str] = str(desc).strip() if desc is not None else ""
+    except Exception as e:
+        print(f"  [AVISO] Não foi possível carregar aba '{nome_aba}' de {caminho.name}: {e}")
+    return resultado
+
+
 def inicializar_tabelas():
     global TABELAS_CEP, TABELAS_CESDI
 
-    # CEP: tipoAto / naturezaAto vêm do mesmo arquivo de manual
-    TABELAS_CEP["tipoAto"] = carregar_tabela_csv(MANUAIS_CEP_DIR / "manualAPICEP v3.csv")
-    TABELAS_CEP["naturezaAto"] = carregar_tabela_csv(MANUAIS_CEP_DIR / "manualUploadCEP v3.csv")
+    # ── CEP: lê dos novos XLSX v3.3 ──────────────────────────────────────────
+    api_cep   = MANUAIS_CEP_DIR / "manualAPICEP v3.3.xlsx"
+    upload_cep = MANUAIS_CEP_DIR / "manualUploadCEP v3.3.xlsx"
 
-    # CESDI: tabelas adicionais do XLSX (inclui tipoAto extraído da aba QualidadeDaParte)
-    xlsx = MANUAIS_CESDI_DIR / "manualUploadCESDI v2.5.xlsx"
-    extras = carregar_tabelas_cesdi_xlsx(xlsx)
-    TABELAS_CESDI.update(extras)
+    if api_cep.exists():
+        TABELAS_CEP["tipoAto"]  = _carregar_aba_xlsx(api_cep, "NaturezaAto", 0, 1)
+    else:
+        # Fallback: CSV antigo
+        TABELAS_CEP["tipoAto"] = carregar_tabela_csv(MANUAIS_CEP_DIR / "manualAPICEP v3.csv")
 
-    # Fallback: se tipoAto não foi extraído do XLSX, usa tabela fixa do manual
+    if upload_cep.exists():
+        TABELAS_CEP["naturezaAto"] = _carregar_aba_xlsx(upload_cep, "NaturezaEscritura", 0, 1)
+    else:
+        TABELAS_CEP["naturezaAto"] = carregar_tabela_csv(MANUAIS_CEP_DIR / "manualUploadCEP v3.csv")
+
+    # qualificacaoParte CEP: aba QualidadeParte col 1=código, col 2=qualidade
+    if api_cep.exists():
+        TABELAS_CEP["qualificacaoParte"] = _carregar_aba_xlsx(api_cep, "QualidadeParte", 1, 2)
+
+    # ── CESDI: lê do novo XLSX API v2.5 ──────────────────────────────────────
+    api_cesdi    = MANUAIS_CESDI_DIR / "manualAPICESDI v2.5.xlsx"
+    upload_cesdi = MANUAIS_CESDI_DIR / "manualUploadCESDI v2.5.xlsx"
+
+    # Tabelas simples do manual API CESDI
+    if api_cesdi.exists():
+        TABELAS_CESDI["tipoBemEdireito"]        = _carregar_aba_xlsx(api_cesdi, "TipoBensEDireito", 0, 1)
+        TABELAS_CESDI["tipoReferenciaCadastral"] = _carregar_aba_xlsx(api_cesdi, "TipoReferenciaCadastral", 0, 1)
+        # qualidadeParte CESDI: col 1=código, col 2=qualidade
+        TABELAS_CESDI["qualidadeParte"] = _carregar_aba_xlsx(api_cesdi, "QualidadeDaParte", 1, 2)
+        # tipoAto CESDI: extrai dos cabeçalhos da aba QualidadeDaParte (ex: "Separação (1)")
+        try:
+            import openpyxl
+            wb_cesdi = openpyxl.load_workbook(api_cesdi, data_only=True)
+            ws_qp = wb_cesdi["QualidadeDaParte"]
+            tipos_ato = {}
+            for row in ws_qp.iter_rows(values_only=True):
+                if not row or row[0] is None:
+                    continue
+                celula = str(row[0]).strip()
+                m = re.match(r"^(.+?)\s*\((\d+)\)\s*$", celula)
+                if m:
+                    tipos_ato[m.group(2)] = m.group(1).strip()
+            if tipos_ato:
+                TABELAS_CESDI["tipoAto"] = tipos_ato
+        except Exception as e:
+            print(f"  [AVISO] Não foi possível extrair tipoAto do CESDI: {e}")
+    else:
+        # Fallback: XLSX upload antigo
+        extras = carregar_tabelas_cesdi_xlsx(upload_cesdi)
+        TABELAS_CESDI.update(extras)
+
+    # Fallback tipoAto CESDI se ainda vazio
     if not TABELAS_CESDI.get("tipoAto"):
         TABELAS_CESDI["tipoAto"] = {
-            "1": "Separação",
-            "2": "Reconciliação",
-            "3": "Conversão de Separação em Divórcio",
-            "4": "Divórcio Direto",
-            "5": "Inventário",
-            "6": "Sobrepartilha",
-            "7": "Rerratificação",
-            "8": "Nomeação de Inventariante",
-            "9": "Partilha",
+            "1": "Separação", "2": "Reconciliação",
+            "3": "Conversão de Separação em Divórcio", "4": "Divórcio Direto",
+            "5": "Inventário", "6": "Sobrepartilha", "7": "Rerratificação",
+            "8": "Nomeação de Inventariante", "9": "Partilha",
         }
 
-    # Códigos de qualificacaoParte comuns ao CEP (baseados no modelo)
-    # O manual CEP não tem aba separada, usamos os mesmos do CESDI como referência
-    TABELAS_CEP["qualificacaoParte"] = TABELAS_CESDI.get("qualidadeParte", {})
+    # Fallback qualificacaoParte CEP se não carregou
+    if not TABELAS_CEP.get("qualificacaoParte"):
+        TABELAS_CEP["qualificacaoParte"] = TABELAS_CESDI.get("qualidadeParte", {})
 
 
 # ─────────────────────────────────────────────
