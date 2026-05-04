@@ -11,6 +11,7 @@ import sys
 import threading
 import tkinter as tk
 import tkinter.filedialog as fd
+import tkinter.ttk as ttk
 from datetime import datetime
 from pathlib import Path
 
@@ -331,6 +332,7 @@ class ValidadorApp(ctk.CTk):
 
         self._arquivo_json: Path | None = None
         self._validando = False
+        self._dados_atuais: dict | None = None
 
         # ── Estado do modo log ────────────────────────────────────────────────
         self._atos_log: list = []
@@ -606,9 +608,11 @@ class ValidadorApp(ctk.CTk):
         abas.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         abas.add("Simplificado")
         abas.add("Técnico")
+        abas.add("Estrutura")
 
         self._txt_resultado  = self._criar_area_texto(abas.tab("Simplificado"))
         self._txt_tecnico    = self._criar_area_texto(abas.tab("Técnico"))
+        self._criar_tree_view(abas.tab("Estrutura"))
 
         # Mensagem inicial em ambas as abas
         self._escrever_inicial()
@@ -800,6 +804,108 @@ class ValidadorApp(ctk.CTk):
         txt.tag_configure("msg",    foreground="#D4D4D4")
         return txt
 
+    # ── Aba Estrutura (TreeView JSON) ─────────────────────────────────────────
+
+    def _criar_tree_view(self, parent):
+        style = ttk.Style()
+        try:
+            style.theme_use("default")
+        except Exception:
+            pass
+        style.configure("Json.Treeview",
+            background=COR_BG,
+            foreground=COR_TEXTO,
+            fieldbackground=COR_BG,
+            borderwidth=0,
+            rowheight=22,
+            font=("Consolas", 10),
+        )
+        style.configure("Json.Treeview.Heading",
+            background=COR_CARD,
+            foreground=COR_TITULO,
+            relief="flat",
+            font=("Consolas", 10, "bold"),
+        )
+        style.map("Json.Treeview",
+            background=[("selected", "#3A3A3A")],
+            foreground=[("selected", COR_BORDA)],
+        )
+        style.configure("Json.Vertical.TScrollbar",
+            background=COR_CARD, troughcolor=COR_BG, borderwidth=0, arrowsize=14)
+        style.configure("Json.Horizontal.TScrollbar",
+            background=COR_CARD, troughcolor=COR_BG, borderwidth=0, arrowsize=14)
+
+        wrapper = tk.Frame(parent, bg=COR_BG)
+        wrapper.pack(fill="both", expand=True, padx=4, pady=4)
+
+        self._tree = ttk.Treeview(
+            wrapper,
+            style="Json.Treeview",
+            show="tree headings",
+            columns=("valor",),
+            selectmode="browse",
+        )
+        self._tree.heading("#0", text="Campo", anchor="w")
+        self._tree.heading("valor", text="Valor", anchor="w")
+        self._tree.column("#0", width=220, minwidth=80, stretch=True)
+        self._tree.column("valor", width=340, minwidth=80, stretch=True)
+
+        self._tree.tag_configure("str",  foreground="#CE9178")
+        self._tree.tag_configure("num",  foreground="#B5CEA8")
+        self._tree.tag_configure("bool", foreground="#569CD6")
+        self._tree.tag_configure("null", foreground="#808080")
+        self._tree.tag_configure("obj",  foreground=COR_AVISO)
+        self._tree.tag_configure("arr",  foreground=COR_AVISO)
+
+        vsb = ttk.Scrollbar(wrapper, orient="vertical",
+                             command=self._tree.yview, style="Json.Vertical.TScrollbar")
+        hsb = ttk.Scrollbar(wrapper, orient="horizontal",
+                             command=self._tree.xview, style="Json.Horizontal.TScrollbar")
+        self._tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        vsb.pack(side="right", fill="y")
+        hsb.pack(side="bottom", fill="x")
+        self._tree.pack(fill="both", expand=True)
+
+    def _popular_tree(self, dados: dict | None):
+        if not hasattr(self, "_tree"):
+            return
+        self._tree.delete(*self._tree.get_children())
+        if not dados:
+            return
+        dados_limpos = {k: v for k, v in dados.items() if not str(k).startswith("_")}
+        self._inserir_no_tree("", "raiz", dados_limpos)
+        for child in self._tree.get_children():
+            self._tree.item(child, open=True)
+
+    def _inserir_no_tree(self, parent: str, chave, valor):
+        chave_str = str(chave)
+        if isinstance(valor, dict):
+            resumo = f"{{{len(valor)}}}" if valor else "{}"
+            no = self._tree.insert(parent, "end", text=chave_str,
+                                   values=(resumo,), tags=("obj",))
+            for k, v in valor.items():
+                if str(k).startswith("_"):
+                    continue
+                self._inserir_no_tree(no, k, v)
+        elif isinstance(valor, list):
+            resumo = f"[{len(valor)}]"
+            no = self._tree.insert(parent, "end", text=chave_str,
+                                   values=(resumo,), tags=("arr",))
+            for i, v in enumerate(valor):
+                self._inserir_no_tree(no, i, v)
+        else:
+            if isinstance(valor, bool):
+                val_str, tag = ("true" if valor else "false"), "bool"
+            elif valor is None:
+                val_str, tag = "null", "null"
+            elif isinstance(valor, str):
+                val_str, tag = f'"{valor}"', "str"
+            else:
+                val_str, tag = str(valor), "num"
+            self._tree.insert(parent, "end", text=chave_str,
+                              values=(val_str,), tags=(tag,))
+
     def _rodape(self):
         rod = ctk.CTkFrame(self, fg_color=COR_CARD, corner_radius=0, height=28)
         rod.pack(fill="x", side="bottom")
@@ -952,6 +1058,8 @@ class ValidadorApp(ctk.CTk):
         self._escrever_inicial()
         for txt in (self._txt_resultado, self._txt_tecnico):
             txt.configure(state="disabled")
+        self._dados_atuais = None
+        self._popular_tree(None)
 
     def _executar_validacao(self):
         if self._validando:
@@ -1001,6 +1109,7 @@ class ValidadorApp(ctk.CTk):
         else:
             vs.validar_cesdi_json(dados, rel)
 
+        self._dados_atuais = dados
         self.after(0, self._exibir_relatorio, rel)
 
     # ── Exibição dos resultados ───────────────────────────────────────────────
@@ -1119,6 +1228,8 @@ class ValidadorApp(ctk.CTk):
         self._lbl_resumo_erros.configure(text=f"  {icone_e}  {len(rel.erros)} erro(s)")
         self._lbl_resumo_avisos.configure(text=f"  {icone_a}  {len(rel.avisos)} aviso(s)")
         self._lbl_resumo_ok.configure(text=f"  ✔  {len(rel.ok)} campo(s) OK")
+
+        self._popular_tree(self._dados_atuais)
 
         self._btn_validar.configure(text="▶  VALIDAR", state="normal")
         self._validando = False
