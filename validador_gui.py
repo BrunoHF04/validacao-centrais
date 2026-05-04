@@ -31,19 +31,19 @@ import validador_signo as vs
 
 # ── Tema e paleta ─────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+ctk.set_default_color_theme("dark-blue")
 
 COR_ERRO    = "#FF5252"
 COR_AVISO   = "#FFB300"
 COR_OK      = "#4CAF50"
-COR_INFO    = "#64B5F6"
-COR_TITULO  = "#90CAF9"
-COR_BG      = "#1A1A2E"
-COR_PANEL   = "#16213E"
-COR_CARD    = "#0F3460"
+COR_INFO    = "#A0A0A0"
+COR_TITULO  = "#C8C8C8"
+COR_BG      = "#1A1A1A"
+COR_PANEL   = "#222222"
+COR_CARD    = "#2C2C2C"
 COR_BORDA   = "#E94560"
 COR_TEXTO   = "#E0E0E0"
-COR_CINZA   = "#757575"
+COR_CINZA   = "#666666"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ class ValidadorApp(ctk.CTk):
             height=36,
             corner_radius=18,
             fg_color=COR_CARD,
-            hover_color="#1a4080",
+            hover_color="#3A3A3A",
             border_width=1,
             border_color=COR_INFO,
             text_color=COR_INFO,
@@ -189,7 +189,7 @@ class ValidadorApp(ctk.CTk):
             command=self._selecionar_arquivo,
             font=ctk.CTkFont(size=12),
             fg_color=COR_CARD,
-            hover_color="#1a4080",
+            hover_color="#3A3A3A",
             border_width=1,
             border_color=COR_INFO,
             text_color=COR_INFO,
@@ -285,7 +285,7 @@ class ValidadorApp(ctk.CTk):
             pady=10,
             wrap="word",
             state="disabled",
-            selectbackground="#264F78",
+            selectbackground="#3D3D3D",
             insertbackground=COR_TEXTO,
         )
 
@@ -301,7 +301,7 @@ class ValidadorApp(ctk.CTk):
         self._txt_resultado.tag_configure("ok",     foreground=COR_OK)
         self._txt_resultado.tag_configure("info",   foreground=COR_INFO)
         self._txt_resultado.tag_configure("titulo", foreground=COR_TITULO,  font=("Consolas", 12, "bold"))
-        self._txt_resultado.tag_configure("sep",    foreground="#333355")
+        self._txt_resultado.tag_configure("sep",    foreground="#444444")
         self._txt_resultado.tag_configure("cinza",  foreground=COR_CINZA)
         self._txt_resultado.tag_configure("campo",  foreground="#CE9178")
         self._txt_resultado.tag_configure("seta",   foreground=COR_CINZA)
