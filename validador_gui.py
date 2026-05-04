@@ -91,6 +91,21 @@ class ValidadorApp(ctk.CTk):
             text_color=COR_CINZA,
         ).pack(side="left", padx=4)
 
+        ctk.CTkButton(
+            cabecalho,
+            text="?",
+            command=self._abrir_ajuda,
+            font=ctk.CTkFont(family="Segoe UI", size=14, weight="bold"),
+            width=36,
+            height=36,
+            corner_radius=18,
+            fg_color=COR_CARD,
+            hover_color="#1a4080",
+            border_width=1,
+            border_color=COR_INFO,
+            text_color=COR_INFO,
+        ).pack(side="right", padx=20)
+
         # ── Corpo ─────────────────────────────────────────────────────────────
         corpo = ctk.CTkFrame(self, fg_color="transparent")
         corpo.pack(fill="both", expand=True, padx=20, pady=16)
@@ -311,6 +326,140 @@ class ValidadorApp(ctk.CTk):
                                                 text_color=COR_OK)
         for w in (self._lbl_resumo_erros, self._lbl_resumo_avisos, self._lbl_resumo_ok):
             w.pack(side="left", padx=16)
+
+    def _abrir_ajuda(self):
+        """Abre janela modal com informações sobre o sistema e instruções de uso."""
+        if hasattr(self, "_janela_ajuda") and self._janela_ajuda.winfo_exists():
+            self._janela_ajuda.focus()
+            return
+
+        win = ctk.CTkToplevel(self)
+        win.title("Sobre o Validador SIGNO")
+        win.geometry("560x620")
+        win.resizable(False, False)
+        win.configure(fg_color=COR_BG)
+        win.transient(self)
+        win.grab_set()
+        self._janela_ajuda = win
+
+        # Centraliza em relação à janela principal
+        self.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 560) // 2
+        y = self.winfo_y() + (self.winfo_height() - 620) // 2
+        win.geometry(f"560x620+{x}+{y}")
+
+        # ── Cabeçalho ─────────────────────────────────────────────────────────
+        cab = ctk.CTkFrame(win, fg_color=COR_CARD, corner_radius=0, height=64)
+        cab.pack(fill="x")
+        cab.pack_propagate(False)
+
+        ctk.CTkLabel(
+            cab,
+            text="⬡  Validador SIGNO",
+            font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"),
+            text_color=COR_TITULO,
+        ).pack(side="left", padx=20)
+
+        ctk.CTkLabel(
+            cab,
+            text="CEP v3.2  •  CESDI v2.5",
+            font=ctk.CTkFont(family="Segoe UI", size=11),
+            text_color=COR_CINZA,
+        ).pack(side="right", padx=20)
+
+        # ── Conteúdo com scroll ────────────────────────────────────────────────
+        scroll = ctk.CTkScrollableFrame(win, fg_color="transparent", corner_radius=0)
+        scroll.pack(fill="both", expand=True, padx=24, pady=16)
+
+        def secao(titulo, icone=""):
+            ctk.CTkLabel(
+                scroll,
+                text=f"{icone}  {titulo}" if icone else titulo,
+                font=ctk.CTkFont(size=13, weight="bold"),
+                text_color=COR_TITULO,
+                anchor="w",
+            ).pack(fill="x", pady=(14, 4))
+            ctk.CTkFrame(scroll, height=1, fg_color=COR_CARD).pack(fill="x", pady=(0, 8))
+
+        def paragrafo(texto, cor=None):
+            ctk.CTkLabel(
+                scroll,
+                text=texto,
+                font=ctk.CTkFont(size=12),
+                text_color=cor or COR_TEXTO,
+                anchor="w",
+                justify="left",
+                wraplength=490,
+            ).pack(fill="x", pady=2)
+
+        def item(bullet, texto, cor=None):
+            row = ctk.CTkFrame(scroll, fg_color="transparent")
+            row.pack(fill="x", pady=2)
+            ctk.CTkLabel(
+                row,
+                text=bullet,
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color=cor or COR_INFO,
+                width=22,
+                anchor="w",
+            ).pack(side="left")
+            ctk.CTkLabel(
+                row,
+                text=texto,
+                font=ctk.CTkFont(size=12),
+                text_color=COR_TEXTO,
+                anchor="w",
+                justify="left",
+                wraplength=460,
+            ).pack(side="left", fill="x", expand=True)
+
+        # ── Sobre ──────────────────────────────────────────────────────────────
+        secao("Sobre o sistema", "ℹ")
+        paragrafo(
+            "O Validador SIGNO é uma ferramenta de diagnóstico local que verifica "
+            "arquivos JSON antes do envio às APIs do SIGNO (Sistema de Informações "
+            "de Geração de Notas e Operações)."
+        )
+        paragrafo(
+            "A validação é feita inteiramente offline, comparando os campos do JSON "
+            "com as regras e valores permitidos definidos nos manuais oficiais."
+        )
+
+        # ── Sistemas ──────────────────────────────────────────────────────────
+        secao("Sistemas suportados", "⚙")
+        item("CEP", "Cadastro de Estrutura de Pagamento — versão 3.2")
+        item("CESDI", "Cadastro de Estrutura de Distribuição — versão 2.5")
+
+        # ── Como usar ─────────────────────────────────────────────────────────
+        secao("Como usar", "▶")
+        item("1.", "Selecione o sistema desejado (CEP ou CESDI) no painel esquerdo.")
+        item("2.", "Carregue o arquivo JSON arrastando-o para a zona indicada ou clicando em \"Procurar arquivo...\".")
+        item("3.", "Clique em VALIDAR para iniciar o diagnóstico.")
+        item("4.", "Analise os resultados no painel direito, com destaque por cores e descrição de cada problema.")
+
+        # ── Legenda de cores ──────────────────────────────────────────────────
+        secao("Legenda de cores", "🎨")
+        item("[ERRO]",  "Problema crítico — o campo está ausente, inválido ou fora do padrão.", COR_ERRO)
+        item("[AVISO]", "Inconsistência ou campo opcional com valor incorreto.", COR_AVISO)
+        item("[OK]",    "Campo validado com sucesso.", COR_OK)
+
+        # ── Dicas ─────────────────────────────────────────────────────────────
+        secao("Dicas", "💡")
+        item("•", "Os manuais são carregados automaticamente ao iniciar o aplicativo.")
+        item("•", "Use o botão \"Limpar\" para reiniciar a validação com um novo arquivo.")
+        item("•", "O diagnóstico não altera nem envia o arquivo — é apenas leitura local.")
+
+        # ── Botão fechar ───────────────────────────────────────────────────────
+        ctk.CTkButton(
+            win,
+            text="Fechar",
+            command=win.destroy,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            fg_color=COR_BORDA,
+            hover_color="#C0392B",
+            height=40,
+            corner_radius=10,
+        ).pack(fill="x", padx=24, pady=(0, 20))
 
     def _rodape(self):
         rod = ctk.CTkFrame(self, fg_color=COR_CARD, corner_radius=0, height=28)
