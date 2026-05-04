@@ -580,17 +580,29 @@ def validar_cep_json(dados: dict, rel: Relatorio):
 
     # ── Campos raiz obrigatórios ──────────────────────────────────
     campos_int_obrig = {
-        "tipoAto":       ("tipoAto",     tabelas.get("tipoAto", {})),
-        "naturezaAto":   ("naturezaAto", tabelas.get("naturezaAto", {})),
-        "status":        ("status",      {}),
-        "livroInicial":  ("livroInicial",{}),
-        "folhaInicial":  ("folhaInicial",{}),
-        "folhaFinal":    ("folhaFinal",  {}),
+        "tipoAto":      ("tipoAto",     tabelas.get("tipoAto", {})),
+        "status":       ("status",      {}),
+        "livroInicial": ("livroInicial",{}),
+        "folhaInicial": ("folhaInicial",{}),
+        "folhaFinal":   ("folhaFinal",  {}),
     }
     for campo, (nome_tab, tab) in campos_int_obrig.items():
         validar_inteiro(dados.get(campo), campo, rel, obrigatorio=True,
                         valores_validos=tab if tab else None,
                         nome_tabela=nome_tab if tab else "")
+
+    # naturezaAto: obrigatório SOMENTE quando tipoAto = 1 (Escritura)
+    tipo_ato = dados.get("tipoAto")
+    natureza = dados.get("naturezaAto")
+    if tipo_ato == 1:
+        validar_inteiro(natureza, "naturezaAto", rel, obrigatorio=True,
+                        valores_validos=tabelas.get("naturezaAto"),
+                        nome_tabela="naturezaAto")
+    elif natureza is not None:
+        # Se informado em outro tipo de ato, apenas valida o código se existir na tabela
+        validar_inteiro(natureza, "naturezaAto", rel, obrigatorio=False,
+                        valores_validos=tabelas.get("naturezaAto"),
+                        nome_tabela="naturezaAto")
 
     # ── Campos inteiros opcionais SEM domínio específico ─────────────────────
     for campo in ["tipoInvalidacaoAto", "livroFinal", "valorOperacao"]:
