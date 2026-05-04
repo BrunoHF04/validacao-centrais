@@ -650,9 +650,20 @@ def validar_cep_json(dados: dict, rel: Relatorio):
 
     # ── Bens e Direitos ───────────────────────────────────────────
     bens = dados.get("bensEdireitos", [])
+    existe_bem = dados.get("existeBemEdireito")
     if isinstance(bens, list):
+        # existeBemEdireito=1 exige que a lista tenha pelo menos um bem preenchido
+        if existe_bem == 1 and len(bens) == 0:
+            rel.erro("bensEdireitos",
+                     "Campo 'existeBemEdireito' indica que há bens/direitos (valor=1), "
+                     "mas a lista 'bensEdireitos' está vazia.")
         for i, bem in enumerate(bens):
-            _validar_bem_cep(bem, i, f"bensEdireitos[{i}]", rel)
+            if not isinstance(bem, dict) or not bem:
+                rel.erro(f"bensEdireitos[{i}]",
+                         "Item de bem e direito vazio ou inválido. "
+                         "Preencha os dados ou remova o item da lista.")
+            else:
+                _validar_bem_cep(bem, i, f"bensEdireitos[{i}]", rel)
 
     # ── Atos de Origem ───────────────────────────────────────────
     atos_origem = dados.get("atosOrigem", [])
@@ -736,12 +747,11 @@ def _validar_parte_cep(parte: dict, idx: int, prefixo: str, rel: Relatorio):
 def _validar_bem_cep(bem: dict, idx: int, prefixo: str, rel: Relatorio):
     tabelas = TABELAS_CEP
 
-    # qualificacaodeBens (tipoBemEdireito) — Imóvel Rural, Imóvel Urbano, Precatório Judicial
-    if bem.get("qualificacaodeBens") is not None:
-        validar_inteiro(bem["qualificacaodeBens"], f"{prefixo}.qualificacaodeBens", rel,
-                        obrigatorio=False,
-                        valores_validos=tabelas.get("tipoBemEdireito"),
-                        nome_tabela="qualificacaodeBens")
+    # qualificacaodeBens: obrigatório (manual CEP diz SIM)
+    validar_inteiro(bem.get("qualificacaodeBens"), f"{prefixo}.qualificacaodeBens", rel,
+                    obrigatorio=True,
+                    valores_validos=tabelas.get("tipoBemEdireito"),
+                    nome_tabela="qualificacaodeBens")
 
     # cep do imóvel: string
     if bem.get("cep"):
@@ -759,13 +769,18 @@ def _validar_bem_cep(bem: dict, idx: int, prefixo: str, rel: Relatorio):
             rel.aviso(f"{prefixo}.{campo_num}",
                       f"Esperado número, recebido {type(v).__name__}: {v!r}")
 
-    # titulares
-    titulares = bem.get("titulares", [])
-    if isinstance(titulares, list):
+    # titulares: obrigatório e não pode ser vazio (manual diz SIM)
+    titulares = bem.get("titulares")
+    if titulares is None or titulares == []:
+        rel.erro(f"{prefixo}.titulares",
+                 "Lista de titulares obrigatória e não pode ser vazia.")
+    elif isinstance(titulares, list):
         for j, tit in enumerate(titulares):
-            if tit.get("cpf") and not isinstance(tit["cpf"], str):
+            if not isinstance(tit, dict) or not tit:
+                rel.erro(f"{prefixo}.titulares[{j}]", "Titular vazio ou inválido.")
+            elif tit.get("cpf") and not isinstance(tit["cpf"], str):
                 rel.erro(f"{prefixo}.titulares[{j}].cpf",
-                         f"CPF do titular deve ser string (preserva zeros à esquerda).")
+                         "CPF do titular deve ser string (preserva zeros à esquerda).")
 
 
 def _validar_ato_origem_cep(ao: dict, idx: int, prefixo: str, rel: Relatorio):
@@ -902,9 +917,19 @@ def validar_cesdi_json(dados: dict, rel: Relatorio):
 
     # ── Bens e Direitos ───────────────────────────────────────────
     bens = dados.get("bensEdireitos", [])
+    existe_bem_cesdi = dados.get("existeBemEdireitoVinculadoAoAto")
     if isinstance(bens, list):
+        if existe_bem_cesdi == "1" and len(bens) == 0:
+            rel.erro("bensEdireitos",
+                     "Campo 'existeBemEdireitoVinculadoAoAto' indica que há bens/direitos, "
+                     "mas a lista 'bensEdireitos' está vazia.")
         for i, bem in enumerate(bens):
-            _validar_bem_cesdi(bem, i, f"bensEdireitos[{i}]", rel)
+            if not isinstance(bem, dict) or not bem:
+                rel.erro(f"bensEdireitos[{i}]",
+                         "Item de bem e direito vazio ou inválido. "
+                         "Preencha os dados ou remova o item da lista.")
+            else:
+                _validar_bem_cesdi(bem, i, f"bensEdireitos[{i}]", rel)
 
     # ── Anexos ───────────────────────────────────────────────────
     for lista_anexos in ["anexos", "anexosEspecificos"]:
@@ -995,9 +1020,9 @@ def _validar_parte_cesdi(parte: dict, idx: int, prefixo: str, rel: Relatorio,
 def _validar_bem_cesdi(bem: dict, idx: int, prefixo: str, rel: Relatorio):
     tabelas = TABELAS_CESDI
 
-    # tipoBemEdireito
+    # tipoBemEdireito: obrigatório (manual CESDI diz SIM)
     validar_inteiro(bem.get("tipoBemEdireito"), f"{prefixo}.tipoBemEdireito", rel,
-                    obrigatorio=False,
+                    obrigatorio=True,
                     valores_validos=tabelas.get("tipoBemEdireito"),
                     nome_tabela="TipoBensEDireito (XLSX)")
 
@@ -1026,11 +1051,16 @@ def _validar_bem_cesdi(bem: dict, idx: int, prefixo: str, rel: Relatorio):
             rel.aviso(f"{prefixo}.{campo_num}",
                       f"Esperado número, recebido {type(v).__name__}: {v!r}")
 
-    # titulares
-    titulares = bem.get("titulares", [])
-    if isinstance(titulares, list):
+    # titulares: obrigatório e não pode ser vazio (manual diz SIM)
+    titulares = bem.get("titulares")
+    if titulares is None or titulares == []:
+        rel.erro(f"{prefixo}.titulares",
+                 "Lista de titulares obrigatória e não pode ser vazia.")
+    elif isinstance(titulares, list):
         for j, tit in enumerate(titulares):
-            if tit.get("cpf") and not isinstance(tit["cpf"], str):
+            if not isinstance(tit, dict) or not tit:
+                rel.erro(f"{prefixo}.titulares[{j}]", "Titular vazio ou inválido.")
+            elif tit.get("cpf") and not isinstance(tit["cpf"], str):
                 rel.erro(f"{prefixo}.titulares[{j}].cpf",
                          "CPF do titular deve ser string (preserva zeros à esquerda).")
 
