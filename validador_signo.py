@@ -381,7 +381,12 @@ def inicializar_tabelas():
         TABELAS_CESDI["estadoCivilParte"] = ec
         # nacionalidadeParte CESDI = 1=Brasileiro, 2=Estrangeiro, 3=Naturalizado (NÃO código de país)
         TABELAS_CESDI["nacionalidadeParte"] = dom_cesdi.get("nacionalidadeParte", {})
-        TABELAS_CESDI["capacidadeCivil"]    = dom_cesdi.get("capacidadeCivil", {})
+        # capacidadeCivil CESDI: no manual o código 1=Capaz aparece na linha "profissaoParte"
+        # por layout da planilha; adicionamos manualmente para garantir completude
+        cc_cesdi = dict(dom_cesdi.get("capacidadeCivil", {}))
+        if "1" not in cc_cesdi:
+            cc_cesdi["1"] = "Capaz"
+        TABELAS_CESDI["capacidadeCivil"] = cc_cesdi
         TABELAS_CESDI["tipoContatoParte"]   = dom_cesdi.get("tipoContatoParte", {})
         TABELAS_CESDI["tipoAtoOrigem"]      = dom_cesdi.get("tipoAtoOrigem", {})
         # ── Abas dedicadas CESDI ─────────────────────────────────────────────
@@ -910,8 +915,7 @@ def _validar_parte_cesdi(parte: dict, idx: int, prefixo: str, rel: Relatorio):
         ("codigoPaisResidencia","pais",               "País de Residência"),
         # nacionalidadeParte CESDI = 1=Brasileiro, 2=Estrangeiro, 3=Naturalizado
         ("nacionalidadeParte",  "nacionalidadeParte", "Nacionalidade"),
-        ("areaAtuacaoParte",    "areaAtuacao",        "Área de Atuação"),
-        ("profissaoParte",      "profissao",          "Profissão"),
+        # areaAtuacaoParte e profissaoParte no CESDI são campos texto livre (não código)
     ]
     for campo, chave_tab, nome_tab in campos_com_dominio:
         v = parte.get(campo)

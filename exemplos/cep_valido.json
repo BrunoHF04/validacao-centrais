@@ -14,13 +14,12 @@
     "folhaFinal": 4,
     "complementoFolhaFinal": "B",
     "valorOperacao": 350000,
-    "prazoPagamento": 0,
+    "prazoPagamento": 1,
     "formaPagamento": 6,
     "dataContrato": "2024-05-15",
     "dataInclusao": "2024-06-01T10:00:00.000Z",
     "existeBemEdireito": 1,
     "reservaDePoderes": false,
-    "naturezaLitigio": 0,
     "acordo": 0,
 
     "partes": [
@@ -53,9 +52,9 @@
             "nomeSocial": "",
             "numero": "1578",
             "orgaoEmissor": "SSP-SP",
-            "paisOrigem": 1,
+            "paisOrigem": 59,
             "profissao": 109,
-            "qualificacaoParte": 6,
+            "qualificacaoParte": 2,
             "regimeBens": 1,
             "semFiliacoes": false,
             "tipoContato": 1,
@@ -70,11 +69,7 @@
             "complemento": "",
             "contato": "(21)98888-5678",
             "cpf": "88653911707",
-            "cpfConjuge": "",
-            "dataCasamento": "",
-            "dataEmissao": "",
             "dataNascimento": "1990-09-25",
-            "documento": "",
             "email": "maria.fernandes@email.com",
             "estadoCivil": 5,
             "filiacoes": [
@@ -85,18 +80,16 @@
             "logradouro": "Rua da Assembleia",
             "municipio": 330455,
             "nacionalidade": 1,
-            "nomeConjuge": "",
             "nomeParte": "Maria Fernandes Oliveira",
             "nomeSocial": "",
             "numero": "10",
-            "orgaoEmissor": "",
-            "paisOrigem": 1,
+            "paisOrigem": 59,
             "profissao": 37,
             "qualificacaoParte": 3,
-            "regimeBens": 0,
+            "regimeBens": 1,
             "semFiliacoes": false,
             "tipoContato": 1,
-            "tipoDocumento": 0,
+            "tipoDocumento": 8,
             "uf": "RJ"
         }
     ],
@@ -115,12 +108,9 @@
             "logradouro": "Rua José Ferreira da Silva",
             "numero": "485",
             "numeroCadastralImovel": "548923",
-            "numeroPrecatorio": "",
-            "numeroProcesso": "",
             "qualificacaodeBens": 1,
             "quantidadeAreaConstruida": 128.75,
             "quantidadeAreaTotal": 250.0,
-            "referenciaCadastralImovel": 0,
             "tipoImovel": 5,
             "tipoTributo": 1,
             "titulares": [
@@ -135,8 +125,7 @@
             "unidadeAreaTotal": 3,
             "valor": 350000,
             "valorFiscal": 320000,
-            "valorImovel": 350000,
-            "varaJudicial": ""
+            "valorImovel": 350000
         }
     ],
 
