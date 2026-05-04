@@ -518,10 +518,11 @@ class ValidadorApp(ctk.CTk):
             frame,
             fg_color=COR_CARD,
             corner_radius=8,
-            height=180,
+            height=0,
             scrollbar_button_color=COR_CINZA,
             scrollbar_button_hover_color=COR_INFO,
         )
+        self._frame_lista_atos.pack(fill="x", padx=16, pady=(0, 4))
 
         # ── Separador ────────────────────────────────────────────────────────
         ctk.CTkFrame(frame, height=1, fg_color=COR_CARD).pack(
@@ -862,7 +863,7 @@ class ValidadorApp(ctk.CTk):
             self._lbl_log.configure(
                 text="Nenhum ato encontrado no log.", text_color=COR_AVISO
             )
-            self._frame_lista_atos.pack_forget()
+            self._frame_lista_atos.configure(height=0)
             return
 
         nome = self._arquivo_log.name if self._arquivo_log else "log"
@@ -887,7 +888,8 @@ class ValidadorApp(ctk.CTk):
             btn.pack(fill="x", padx=4, pady=2)
             self._btn_atos.append(btn)
 
-        self._frame_lista_atos.pack(fill="x", padx=16, pady=(0, 4))
+        altura = min(len(atos) * 38, 190)
+        self._frame_lista_atos.configure(height=altura)
 
     def _selecionar_ato(self, idx: int):
         """Destaca o ato selecionado e dispara validação."""
@@ -939,7 +941,7 @@ class ValidadorApp(ctk.CTk):
         self._lbl_log.configure(text="Nenhum log carregado", text_color=COR_CINZA)
         for widget in self._frame_lista_atos.winfo_children():
             widget.destroy()
-        self._frame_lista_atos.pack_forget()
+        self._frame_lista_atos.configure(height=0)
         self._lbl_resumo_erros.configure(text="")
         self._lbl_resumo_avisos.configure(text="")
         self._lbl_resumo_ok.configure(text="")
@@ -955,7 +957,10 @@ class ValidadorApp(ctk.CTk):
         if self._validando:
             return
         if not self._arquivo_json or not self._arquivo_json.exists():
-            self._mostrar_erro_inline("Selecione um arquivo JSON válido antes de validar.")
+            if self._atos_log:
+                self._mostrar_erro_inline("Clique em um ato da lista do log para validar.")
+            else:
+                self._mostrar_erro_inline("Selecione um arquivo JSON ou importe um arquivo de log.")
             return
         if not self._tabelas_carregadas:
             self._mostrar_erro_inline("Aguarde — os manuais ainda estão sendo carregados...")
