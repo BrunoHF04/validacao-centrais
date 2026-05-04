@@ -121,6 +121,7 @@ _CAMPOS = {
     "responsavelFilhosMenores": "Responsável por Filhos Menores",
     "filiacoes":            "Filiações",
     # Campos de bem/direito
+    "qualificacaodeBens":           "Tipo do Bem/Direito",
     "tipoBemEdireito":              "Tipo do Bem/Direito",
     "referenciaCadastralImovel":    "Referência Cadastral do Imóvel",
     "cin":                          "CIN (Código Imobiliário Nacional)",
@@ -133,6 +134,7 @@ _CAMPOS = {
     "quantidadeUnidadeAreaConstruida": "Área Construída",
     "titulares":                    "Titulares",
     # Campos de ato de origem
+    "cartorio":                     "CNS do Cartório de Origem",
     "numeroCns":                    "Número do CNS",
     "atosAnteriores":               "Atos Anteriores",
     "outroCartorio":                "Outro Cartório",
