@@ -154,15 +154,14 @@ def _carregar_aba_xlsx(caminho: Path, nome_aba: str, col_cod: int = 0, col_desc:
         import openpyxl
         wb = openpyxl.load_workbook(caminho, data_only=True)
         ws = wb[nome_aba]
-        rows = list(ws.iter_rows(values_only=True))
-        for row in rows[1:]:  # pula cabeçalho
+        for row in list(ws.iter_rows(values_only=True))[1:]:
             if not row or len(row) <= max(col_cod, col_desc):
                 continue
             cod  = row[col_cod]
             desc = row[col_desc]
             if cod is None:
                 continue
-            cod_str = str(int(cod)) if isinstance(cod, float) else str(cod).strip()
+            cod_str = str(int(cod)) if isinstance(cod, (int, float)) else str(cod).strip()
             if re.match(r"^\d+$", cod_str):
                 resultado[cod_str] = str(desc).strip() if desc is not None else ""
     except Exception as e:
@@ -170,49 +169,240 @@ def _carregar_aba_xlsx(caminho: Path, nome_aba: str, col_cod: int = 0, col_desc:
     return resultado
 
 
+def _carregar_aba_xlsx_str(caminho: Path, nome_aba: str,
+                            col_cod: int = 0, col_desc: int = 1) -> dict:
+    """Igual a _carregar_aba_xlsx mas aceita códigos não-numéricos (ex: siglas de tribunal)."""
+    resultado = {}
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(caminho, data_only=True)
+        ws = wb[nome_aba]
+        for row in list(ws.iter_rows(values_only=True))[1:]:
+            if not row or len(row) <= max(col_cod, col_desc):
+                continue
+            cod  = row[col_cod]
+            desc = row[col_desc]
+            if cod is None:
+                continue
+            cod_str = str(cod).strip()
+            if cod_str and cod_str not in ("None", "nan"):
+                resultado[cod_str] = str(desc).strip() if desc is not None else ""
+    except Exception as e:
+        print(f"  [AVISO] Não foi possível carregar aba '{nome_aba}' de {caminho.name}: {e}")
+    return resultado
+
+
+def _carregar_profissoes(caminho: Path, nome_aba: str = "Profissão") -> tuple:
+    """
+    Lê a aba Profissão com estrutura de 4 colunas:
+      col 0: Código Área de Atuação
+      col 1: Área de Atuação
+      col 2: Código Profissão
+      col 3: Profissão
+    Retorna (dict_area_atuacao, dict_profissao).
+    """
+    area_dict = {}
+    prof_dict = {}
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(caminho, data_only=True)
+        # Tenta variações do nome da aba
+        aba_real = next((s for s in wb.sheetnames if "rofiss" in s), None)
+        if not aba_real:
+            return area_dict, prof_dict
+        ws = wb[aba_real]
+        for row in list(ws.iter_rows(values_only=True))[1:]:
+            if not row or len(row) < 3:
+                continue
+            cod_area, desc_area, cod_prof, *rest = list(row) + [None, None]
+            desc_prof = rest[0] if rest else None
+            if cod_area is not None:
+                s = str(int(cod_area)) if isinstance(cod_area, (int, float)) else str(cod_area).strip()
+                if re.match(r"^\d+$", s):
+                    area_dict[s] = str(desc_area).strip() if desc_area else ""
+            if cod_prof is not None:
+                s = str(int(cod_prof)) if isinstance(cod_prof, (int, float)) else str(cod_prof).strip()
+                if re.match(r"^\d+$", s):
+                    prof_dict[s] = str(desc_prof).strip() if desc_prof else ""
+    except Exception as e:
+        print(f"  [AVISO] Não foi possível carregar profissões de {caminho.name}: {e}")
+    return area_dict, prof_dict
+
+
+def _extrair_dominio_campo(caminho: Path, nome_campo: str, col_campo: int = 0,
+                            col_cod: int = 7, col_desc: int = 8) -> dict:
+    """
+    Extrai os códigos de domínio de um campo na aba OrientaçãoDePreenchimento.
+    Encontra a linha com nome_campo e coleta pares (Código, Domínio) até o próximo campo.
+    """
+    resultado = {}
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(caminho, data_only=True)
+        aba = next((s for s in wb.sheetnames if "rienta" in s), None)
+        if not aba:
+            return resultado
+        ws = wb[aba]
+        capturando = False
+        for row in ws.iter_rows(values_only=True):
+            campo_val = row[col_campo] if len(row) > col_campo else None
+            if campo_val == nome_campo:
+                capturando = True
+            if capturando and campo_val not in (None, nome_campo):
+                break
+            if capturando:
+                cod  = row[col_cod]  if len(row) > col_cod  else None
+                desc = row[col_desc] if len(row) > col_desc else None
+                if cod is not None and desc is not None:
+                    cod_str = str(int(cod)) if isinstance(cod, (int, float)) else str(cod).strip()
+                    if re.match(r"^\d+$", cod_str):
+                        resultado[cod_str] = str(desc).strip()
+    except Exception as e:
+        print(f"  [AVISO] Não foi possível extrair domínio de '{nome_campo}' em {caminho.name}: {e}")
+    return resultado
+
+
+def _extrair_todos_dominios_orientacao(caminho: Path,
+                                        col_campo: int = 0,
+                                        col_cod: int = 7,
+                                        col_desc: int = 8) -> dict:
+    """
+    Lê a aba OrientaçãoDePreenchimento e extrai TODOS os campos que possuem
+    domínio com 2 ou mais códigos numéricos.
+    Retorna {nome_campo: {código: descrição}}.
+    """
+    bruto: dict = {}
+    try:
+        import openpyxl
+        wb = openpyxl.load_workbook(caminho, data_only=True)
+        aba = next((s for s in wb.sheetnames if "rienta" in s), None)
+        if not aba:
+            return {}
+        ws = wb[aba]
+        campo_atual = None
+        for row in ws.iter_rows(values_only=True):
+            if not row or len(row) <= max(col_campo, col_cod, col_desc):
+                continue
+            campo_val = row[col_campo]
+            cod        = row[col_cod]
+            desc       = row[col_desc]
+            if campo_val is not None:
+                # Pega só a primeira linha do nome do campo (remove sufixos de obrigatoriedade)
+                campo_atual = str(campo_val).strip().split("\n")[0].strip()
+            if campo_atual and cod is not None:
+                if isinstance(cod, (int, float)) and not isinstance(cod, bool):
+                    cod_str = str(int(cod))
+                else:
+                    cod_str = str(cod).strip()
+                if re.match(r"^\d+$", cod_str):
+                    if campo_atual not in bruto:
+                        bruto[campo_atual] = {}
+                    bruto[campo_atual][cod_str] = str(desc).strip() if desc is not None else ""
+    except Exception as e:
+        print(f"  [AVISO] Não foi possível extrair domínios de {caminho.name}: {e}")
+        return {}
+    # Retorna apenas campos com 2+ códigos (domínios reais, não apenas exemplos)
+    return {k: v for k, v in bruto.items() if len(v) >= 2}
+
+
 def inicializar_tabelas():
     global TABELAS_CEP, TABELAS_CESDI
 
     # ── CEP: lê dos novos XLSX v3.3 ──────────────────────────────────────────
-    api_cep   = MANUAIS_CEP_DIR / "manualAPICEP v3.3.xlsx"
+    api_cep    = MANUAIS_CEP_DIR / "manualAPICEP v3.3.xlsx"
     upload_cep = MANUAIS_CEP_DIR / "manualUploadCEP v3.3.xlsx"
 
-    if api_cep.exists():
-        TABELAS_CEP["tipoAto"]  = _carregar_aba_xlsx(api_cep, "NaturezaAto", 0, 1)
-    else:
-        # Fallback: CSV antigo
-        TABELAS_CEP["tipoAto"] = carregar_tabela_csv(MANUAIS_CEP_DIR / "manualAPICEP v3.csv")
+    src_cep = api_cep if api_cep.exists() else (upload_cep if upload_cep.exists() else None)
 
-    if upload_cep.exists():
-        TABELAS_CEP["naturezaAto"] = _carregar_aba_xlsx(upload_cep, "NaturezaEscritura", 0, 1)
+    if src_cep:
+        # ── Domínios da aba OrientaçãoDePreenchimento (CEP) ──────────────────
+        dom_cep = _extrair_todos_dominios_orientacao(src_cep)
+        # tipoAto: usa função específica para pegar descrições corretas (col 7/8)
+        TABELAS_CEP["tipoAto"]         = _extrair_dominio_campo(src_cep, "tipoAto")
+        # Outros domínios do CEP direto da aba de orientação
+        TABELAS_CEP["prazoPagamento"]   = dom_cep.get("prazoPagamento", {})
+        TABELAS_CEP["formaPagamento"]   = dom_cep.get("formaPagamento", {})
+        TABELAS_CEP["existeBemEdireito"]= dom_cep.get("existeBemEdireito", {})
+        TABELAS_CEP["acordo"]           = dom_cep.get("acordo", {})
+        TABELAS_CEP["tipoDocumento"]    = dom_cep.get("tipoDocumento", {})
+        TABELAS_CEP["genero"]           = dom_cep.get("sexo", {})
+        TABELAS_CEP["estadoCivil"]      = dom_cep.get("estadoCivil", {})
+        # nacionalidade CEP = 1=Brasileiro, 2=Estrangeiro, 3=Naturalizado (NÃO código de país)
+        TABELAS_CEP["nacionalidade"]    = dom_cep.get("nacionalidade", {})
+        TABELAS_CEP["capacidadeCivil"]  = dom_cep.get("capacidadeCivil", {})
+        TABELAS_CEP["regimeBens"]       = dom_cep.get("regimeBens", {})
+        TABELAS_CEP["tipoContato"]      = dom_cep.get("tipoContato", {})
+        # tipoBemEdireito CEP = "qualificacaodeBens" na aba de orientação
+        TABELAS_CEP["tipoBemEdireito"]  = dom_cep.get("qualificacaodeBens", {})
+        TABELAS_CEP["tipoAtoOrigem"]    = dom_cep.get("tipoAtoOrigem", {})
+        # ── Abas dedicadas ────────────────────────────────────────────────────
+        for nome_aba in ("NaturezaAto", "NaturezaEscritura"):
+            tab = _carregar_aba_xlsx(src_cep, nome_aba, 0, 1)
+            if tab:
+                TABELAS_CEP["naturezaAto"] = tab
+                break
+        TABELAS_CEP["naturezaLitigio"]   = _carregar_aba_xlsx(src_cep, "NaturezaLitigio", 0, 1)
+        TABELAS_CEP["qualificacaoParte"]  = _carregar_aba_xlsx(src_cep, "QualidadeParte", 1, 2)
+        TABELAS_CEP["pais"]              = _carregar_aba_xlsx(src_cep, "País", 0, 2)
+        TABELAS_CEP["municipio"]         = _carregar_aba_xlsx(src_cep, "Município", 0, 1)
+        if upload_cep.exists():
+            TABELAS_CEP["estado"] = _carregar_aba_xlsx(upload_cep, "Estado", 0, 1)
+        area, prof = _carregar_profissoes(src_cep)
+        TABELAS_CEP["areaAtuacao"] = area
+        TABELAS_CEP["profissao"]   = prof
+        TABELAS_CEP["tribunal"]    = _carregar_aba_xlsx_str(src_cep, "Tribunais", 0, 1)
     else:
+        TABELAS_CEP["tipoAto"]    = carregar_tabela_csv(MANUAIS_CEP_DIR / "manualAPICEP v3.csv")
         TABELAS_CEP["naturezaAto"] = carregar_tabela_csv(MANUAIS_CEP_DIR / "manualUploadCEP v3.csv")
-
-    # qualificacaoParte CEP: aba QualidadeParte col 1=código, col 2=qualidade
-    if api_cep.exists():
-        TABELAS_CEP["qualificacaoParte"] = _carregar_aba_xlsx(api_cep, "QualidadeParte", 1, 2)
 
     # ── CESDI: lê do novo XLSX API v2.5 ──────────────────────────────────────
     api_cesdi    = MANUAIS_CESDI_DIR / "manualAPICESDI v2.5.xlsx"
     upload_cesdi = MANUAIS_CESDI_DIR / "manualUploadCESDI v2.5.xlsx"
 
-    # Tabelas simples do manual API CESDI
-    if api_cesdi.exists():
-        TABELAS_CESDI["tipoBemEdireito"]        = _carregar_aba_xlsx(api_cesdi, "TipoBensEDireito", 0, 1)
-        TABELAS_CESDI["tipoReferenciaCadastral"] = _carregar_aba_xlsx(api_cesdi, "TipoReferenciaCadastral", 0, 1)
-        # qualidadeParte CESDI: col 1=código, col 2=qualidade
-        TABELAS_CESDI["qualidadeParte"] = _carregar_aba_xlsx(api_cesdi, "QualidadeDaParte", 1, 2)
+    src_cesdi = api_cesdi if api_cesdi.exists() else (upload_cesdi if upload_cesdi.exists() else None)
+
+    if src_cesdi:
+        # ── Domínios da aba OrientaçãoDePreenchimento (CESDI) ────────────────
+        dom_cesdi = _extrair_todos_dominios_orientacao(src_cesdi)
+        TABELAS_CESDI["prazoPagamento"]              = dom_cesdi.get("prazoPagamento", {})
+        TABELAS_CESDI["formaPagamento"]              = dom_cesdi.get("formaPagamento", {})
+        TABELAS_CESDI["regimeDeBensDireitosDoCasamento"] = dom_cesdi.get("regimeDeBensDireitosDoCasamento", {})
+        TABELAS_CESDI["existeBemEdireitoVinculadoAoAto"] = dom_cesdi.get("existeBemEdireitoVinculadoAoAto", {})
+        # tipoDocumento CESDI usa códigos IBGE (1717-1726) — mescla os dois conjuntos
+        td_cesdi = {}
+        td_cesdi.update(dom_cesdi.get("cpf", {}))       # códigos 1717-1721 ficam no bloco "cpf"
+        td_cesdi.update(dom_cesdi.get("tipoDocumento", {}))  # 1722-1726
+        TABELAS_CESDI["tipoDocumento"]    = td_cesdi
+        TABELAS_CESDI["genero"]           = dom_cesdi.get("sexo", {})
+        # estadoCivilParte CESDI: mescla bloco "filiacoes" (1-3) + "estadoCivilParte" (4-7)
+        ec = {}
+        ec.update(dom_cesdi.get("filiacoes <Lista>", {}))
+        ec.update(dom_cesdi.get("estadoCivilParte", {}))
+        TABELAS_CESDI["estadoCivilParte"] = ec
+        # nacionalidadeParte CESDI = 1=Brasileiro, 2=Estrangeiro, 3=Naturalizado (NÃO código de país)
+        TABELAS_CESDI["nacionalidadeParte"] = dom_cesdi.get("nacionalidadeParte", {})
+        TABELAS_CESDI["capacidadeCivil"]    = dom_cesdi.get("capacidadeCivil", {})
+        TABELAS_CESDI["tipoContatoParte"]   = dom_cesdi.get("tipoContatoParte", {})
+        TABELAS_CESDI["tipoAtoOrigem"]      = dom_cesdi.get("tipoAtoOrigem", {})
+        # ── Abas dedicadas CESDI ─────────────────────────────────────────────
+        TABELAS_CESDI["tipoBemEdireito"]         = _carregar_aba_xlsx(src_cesdi, "TipoBensEDireito", 0, 1)
+        TABELAS_CESDI["tipoReferenciaCadastral"]  = _carregar_aba_xlsx(src_cesdi, "TipoReferenciaCadastral", 0, 1)
+        TABELAS_CESDI["qualidadeParte"]           = _carregar_aba_xlsx(src_cesdi, "QualidadeDaParte", 1, 2)
+        TABELAS_CESDI["pais"]      = _carregar_aba_xlsx(src_cesdi, "País", 0, 2) or TABELAS_CEP.get("pais", {})
+        TABELAS_CESDI["municipio"] = _carregar_aba_xlsx(src_cesdi, "Município", 0, 1) or TABELAS_CEP.get("municipio", {})
+        area_c, prof_c = _carregar_profissoes(src_cesdi)
+        TABELAS_CESDI["areaAtuacao"] = area_c or TABELAS_CEP.get("areaAtuacao", {})
+        TABELAS_CESDI["profissao"]   = prof_c or TABELAS_CEP.get("profissao", {})
         # tipoAto CESDI: extrai dos cabeçalhos da aba QualidadeDaParte (ex: "Separação (1)")
         try:
             import openpyxl
-            wb_cesdi = openpyxl.load_workbook(api_cesdi, data_only=True)
-            ws_qp = wb_cesdi["QualidadeDaParte"]
+            wb_c = openpyxl.load_workbook(src_cesdi, data_only=True)
+            ws_qp = wb_c["QualidadeDaParte"]
             tipos_ato = {}
             for row in ws_qp.iter_rows(values_only=True):
                 if not row or row[0] is None:
                     continue
-                celula = str(row[0]).strip()
-                m = re.match(r"^(.+?)\s*\((\d+)\)\s*$", celula)
+                m = re.match(r"^(.+?)\s*\((\d+)\)\s*$", str(row[0]).strip())
                 if m:
                     tipos_ato[m.group(2)] = m.group(1).strip()
             if tipos_ato:
@@ -220,11 +410,10 @@ def inicializar_tabelas():
         except Exception as e:
             print(f"  [AVISO] Não foi possível extrair tipoAto do CESDI: {e}")
     else:
-        # Fallback: XLSX upload antigo
         extras = carregar_tabelas_cesdi_xlsx(upload_cesdi)
         TABELAS_CESDI.update(extras)
 
-    # Fallback tipoAto CESDI se ainda vazio
+    # Fallback tipoAto CESDI
     if not TABELAS_CESDI.get("tipoAto"):
         TABELAS_CESDI["tipoAto"] = {
             "1": "Separação", "2": "Reconciliação",
@@ -233,9 +422,16 @@ def inicializar_tabelas():
             "8": "Nomeação de Inventariante", "9": "Partilha",
         }
 
-    # Fallback qualificacaoParte CEP se não carregou
+    # Fallback qualificacaoParte CEP
     if not TABELAS_CEP.get("qualificacaoParte"):
         TABELAS_CEP["qualificacaoParte"] = TABELAS_CESDI.get("qualidadeParte", {})
+
+    # Compartilha tabelas geográficas entre sistemas se uma estiver vazia
+    for chave in ("pais", "municipio", "areaAtuacao", "profissao"):
+        if not TABELAS_CEP.get(chave) and TABELAS_CESDI.get(chave):
+            TABELAS_CEP[chave] = TABELAS_CESDI[chave]
+        if not TABELAS_CESDI.get(chave) and TABELAS_CEP.get(chave):
+            TABELAS_CESDI[chave] = TABELAS_CEP[chave]
 
 
 # ─────────────────────────────────────────────
@@ -391,18 +587,28 @@ def validar_cep_json(dados: dict, rel: Relatorio):
                         valores_validos=tab if tab else None,
                         nome_tabela=nome_tab if tab else "")
 
-    # ── Campos inteiros opcionais ─────────────────────────────────
-    # Nota: complemento* são strings alfanuméricas, não inteiros
-    campos_int_opcionais = [
-        "tipoInvalidacaoAto", "livroFinal",
-        "valorOperacao", "prazoPagamento", "formaPagamento",
-        "existeBemEdireito", "naturezaLitigio", "acordo",
-    ]
-    for campo in campos_int_opcionais:
+    # ── Campos inteiros opcionais SEM domínio específico ─────────────────────
+    for campo in ["tipoInvalidacaoAto", "livroFinal", "valorOperacao"]:
         v = dados.get(campo)
         if v is not None and not isinstance(v, (int, float)) or isinstance(v, bool):
             if campo in dados and isinstance(dados[campo], str) and not dados[campo].isdigit():
                 rel.aviso(campo, f"Esperado número, recebeu string: {dados[campo]!r}")
+
+    # ── Campos inteiros opcionais COM domínio ────────────────────────────────
+    campos_com_dom_raiz = [
+        ("prazoPagamento",    "prazoPagamento",    "Prazo de Pagamento"),
+        ("formaPagamento",    "formaPagamento",    "Forma de Pagamento"),
+        ("existeBemEdireito", "existeBemEdireito", "Existência de Bem/Direito"),
+        ("acordo",            "acordo",            "Acordo"),
+        ("naturezaLitigio",   "naturezaLitigio",   "Natureza do Litígio"),
+    ]
+    for campo, chave_tab, nome_tab in campos_com_dom_raiz:
+        v = dados.get(campo)
+        if v is not None:
+            tab = tabelas.get(chave_tab)
+            validar_inteiro(v, campo, rel, obrigatorio=False,
+                            valores_validos=tab if tab else None,
+                            nome_tabela=nome_tab if tab else "")
 
     # ── Campos de data ────────────────────────────────────────────
     validar_data_iso(dados.get("dataAto"),      "dataAto",      rel, obrigatorio=True)
@@ -477,13 +683,27 @@ def _validar_parte_cep(parte: dict, idx: int, prefixo: str, rel: Relatorio):
         if parte.get(campo_data):
             validar_data_iso(parte[campo_data], f"{prefixo}.{campo_data}", rel)
 
-    # inteiros opcionais com domínio
-    for campo in ["estadoCivil", "genero", "tipoDocumento", "tipoContato",
-                  "capacidadeCivil", "areaAtuacao", "profissao", "regimeBens",
-                  "municipio", "nacionalidade", "paisOrigem"]:
+    # inteiros opcionais com validação de domínio (tabelas dos manuais)
+    campos_com_dominio = [
+        ("tipoDocumento",  "tipoDocumento",  "Tipo de Documento"),
+        ("genero",         "genero",         "Gênero"),
+        ("estadoCivil",    "estadoCivil",    "Estado Civil"),
+        ("nacionalidade",  "nacionalidade",  "Nacionalidade"),
+        ("capacidadeCivil","capacidadeCivil","Capacidade Civil"),
+        ("regimeBens",     "regimeBens",     "Regime de Bens"),
+        ("tipoContato",    "tipoContato",    "Tipo de Contato"),
+        ("municipio",      "municipio",      "Município"),
+        ("paisOrigem",     "pais",           "País de Origem"),
+        ("areaAtuacao",    "areaAtuacao",    "Área de Atuação"),
+        ("profissao",      "profissao",      "Profissão"),
+    ]
+    for campo, chave_tab, nome_tab in campos_com_dominio:
         v = parte.get(campo)
-        if v is not None and not isinstance(v, int):
-            rel.aviso(f"{prefixo}.{campo}", f"Esperado inteiro, recebido: {type(v).__name__} = {v!r}")
+        if v is not None:
+            tab = tabelas.get(chave_tab)
+            validar_inteiro(v, f"{prefixo}.{campo}", rel, obrigatorio=False,
+                            valores_validos=tab if tab else None,
+                            nome_tabela=nome_tab if tab else "")
 
     # semFiliacoes: booleano
     if "semFiliacoes" in parte:
@@ -497,6 +717,15 @@ def _validar_parte_cep(parte: dict, idx: int, prefixo: str, rel: Relatorio):
 
 
 def _validar_bem_cep(bem: dict, idx: int, prefixo: str, rel: Relatorio):
+    tabelas = TABELAS_CEP
+
+    # qualificacaodeBens (tipoBemEdireito) — Imóvel Rural, Imóvel Urbano, Precatório Judicial
+    if bem.get("qualificacaodeBens") is not None:
+        validar_inteiro(bem["qualificacaodeBens"], f"{prefixo}.qualificacaodeBens", rel,
+                        obrigatorio=False,
+                        valores_validos=tabelas.get("tipoBemEdireito"),
+                        nome_tabela="qualificacaodeBens")
+
     # cep do imóvel: string
     if bem.get("cep"):
         validar_string_numerica(bem["cep"], f"{prefixo}.cep", rel, comprimento=8, nome="CEP do imóvel")
@@ -526,6 +755,26 @@ def _validar_ato_origem_cep(ao: dict, idx: int, prefixo: str, rel: Relatorio):
     # CNS: string
     if ao.get("numeroCns") and not isinstance(ao["numeroCns"], str):
         rel.erro(f"{prefixo}.numeroCns", "CNS deve ser string (preserva zeros à esquerda).")
+
+    # tribunal: string — valida contra tabela de tribunais
+    if ao.get("tribunal"):
+        cod_trib = str(ao["tribunal"]).strip()
+        tab_trib = TABELAS_CEP.get("tribunal", {})
+        if tab_trib and cod_trib not in tab_trib:
+            codigos = ", ".join(sorted(tab_trib.keys()))
+            rel.aviso(f"{prefixo}.tribunal",
+                      f"Código de tribunal '{cod_trib}' não reconhecido.\n"
+                      f"            Códigos válidos: {codigos}")
+        elif tab_trib:
+            rel.sucesso(f"{prefixo}.tribunal", f"{cod_trib} → {tab_trib[cod_trib]}")
+
+    # municipioCartorioAtoOrigem: valida contra tabela de municípios
+    v_mun = ao.get("municipioCartorioAtoOrigem")
+    if v_mun is not None:
+        tab_mun = TABELAS_CEP.get("municipio")
+        validar_inteiro(v_mun, f"{prefixo}.municipioCartorioAtoOrigem", rel, obrigatorio=False,
+                        valores_validos=tab_mun if tab_mun else None,
+                        nome_tabela="Município (IBGE)" if tab_mun else "")
 
     # booleans
     for campo_bool in ["atosAnteriores", "cartorioAtual", "outroCartorio"]:
@@ -558,13 +807,27 @@ def validar_cesdi_json(dados: dict, rel: Relatorio):
         if dados.get(campo_data):
             validar_data_iso(dados[campo_data], campo_data, rel)
 
-    # ── Campos inteiros opcionais ─────────────────────────────────
-    for campo in ["livroFinal", "prazoPagamento", "formaPagamento",
-                  "regimeDeBensDireitosDoCasamento", "quantidadefilhosMaiores",
-                  "quantidadefilhosMenores", "municipioCartorioAtoOrigem", "tipoAtoOrigem"]:
+    # ── Campos inteiros opcionais sem domínio ─────────────────────
+    for campo in ["livroFinal", "quantidadefilhosMaiores", "quantidadefilhosMenores"]:
         v = dados.get(campo)
         if v is not None and not isinstance(v, int):
             rel.aviso(campo, f"Esperado inteiro, recebido {type(v).__name__}: {v!r}")
+
+    # ── Campos inteiros opcionais com domínio ─────────────────────
+    campos_dom_cesdi = [
+        ("prazoPagamento",    "prazoPagamento",    "Prazo de Pagamento"),
+        ("formaPagamento",    "formaPagamento",    "Forma de Pagamento"),
+        ("regimeDeBensDireitosDoCasamento", "regimeDeBensDireitosDoCasamento", "Regime de Bens do Casamento"),
+        ("municipioCartorioAtoOrigem", "municipio", "Município"),
+        ("tipoAtoOrigem", "tipoAtoOrigem", "Tipo do Ato de Origem"),
+    ]
+    for campo, chave_tab, nome_tab in campos_dom_cesdi:
+        v = dados.get(campo)
+        if v is not None:
+            tab = tabelas.get(chave_tab)
+            validar_inteiro(v, campo, rel, obrigatorio=False,
+                            valores_validos=tab if tab else None,
+                            nome_tabela=nome_tab if tab else "")
 
     # ── existeBemEdireitoVinculadoAoAto: string (0 ou 1 como texto?) ─
     v_bem = dados.get("existeBemEdireitoVinculadoAoAto")
@@ -634,13 +897,29 @@ def _validar_parte_cesdi(parte: dict, idx: int, prefixo: str, rel: Relatorio):
         if parte.get(campo_data):
             validar_data_iso(parte[campo_data], f"{prefixo}.{campo_data}", rel)
 
-    # inteiros
-    for campo in ["tipoDocumento", "genero", "capacidadeCivil", "estadoCivilParte",
-                  "tipoContatoParte", "cidadeResidencia", "codigoPaisParte",
-                  "codigoPaisResidencia", "nacionalidadeParte", "regimeDeBensDireitosDoCasamento"]:
+    # inteiros com validação de domínio (tabelas dos manuais)
+    campos_com_dominio = [
+        ("tipoDocumento",     "tipoDocumento",      "Tipo de Documento"),
+        ("genero",            "genero",             "Gênero"),
+        ("estadoCivilParte",  "estadoCivilParte",   "Estado Civil"),
+        ("capacidadeCivil",   "capacidadeCivil",    "Capacidade Civil"),
+        ("tipoContatoParte",  "tipoContatoParte",   "Tipo de Contato"),
+        ("regimeDeBensDireitosDoCasamento", "regimeDeBensDireitosDoCasamento", "Regime de Bens do Casamento"),
+        ("cidadeResidencia",    "municipio",          "Município"),
+        ("codigoPaisParte",     "pais",               "País da Parte"),
+        ("codigoPaisResidencia","pais",               "País de Residência"),
+        # nacionalidadeParte CESDI = 1=Brasileiro, 2=Estrangeiro, 3=Naturalizado
+        ("nacionalidadeParte",  "nacionalidadeParte", "Nacionalidade"),
+        ("areaAtuacaoParte",    "areaAtuacao",        "Área de Atuação"),
+        ("profissaoParte",      "profissao",          "Profissão"),
+    ]
+    for campo, chave_tab, nome_tab in campos_com_dominio:
         v = parte.get(campo)
-        if v is not None and not isinstance(v, int):
-            rel.aviso(f"{prefixo}.{campo}", f"Esperado inteiro, recebido {type(v).__name__}: {v!r}")
+        if v is not None:
+            tab = tabelas.get(chave_tab)
+            validar_inteiro(v, f"{prefixo}.{campo}", rel, obrigatorio=False,
+                            valores_validos=tab if tab else None,
+                            nome_tabela=nome_tab if tab else "")
 
     # booleans
     for campo_bool in ["responsavelFilhosMenores", "naoPossuiFiliacao"]:

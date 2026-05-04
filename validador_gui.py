@@ -133,9 +133,13 @@ _CAMPOS = {
     "quantidadeUnidadeAreaConstruida": "Área Construída",
     "titulares":                    "Titulares",
     # Campos de ato de origem
-    "numeroCns":        "Número do CNS",
-    "atosAnteriores":   "Atos Anteriores",
-    "outroCartorio":    "Outro Cartório",
+    "numeroCns":                    "Número do CNS",
+    "atosAnteriores":               "Atos Anteriores",
+    "outroCartorio":                "Outro Cartório",
+    "tribunal":                     "Tribunal",
+    # Campos CESDI específicos de parte
+    "areaAtuacaoParte":             "Área de Atuação",
+    "profissaoParte":               "Profissão",
     # Campos de anexo
     "base64Content":    "Conteúdo do Arquivo (base64)",
     "extensaoArquivo":  "Extensão do Arquivo",
