@@ -432,16 +432,15 @@ class ValidadorApp(ctk.CTk):
             text_color=COR_TITULO,
         ).pack(anchor="w", padx=20, pady=(0, 8))
 
-        # Zona de drop
+        # Zona de drop (invisível, mantida para drag-and-drop funcionar)
         self._zona_drop = ctk.CTkFrame(
             frame,
-            fg_color=COR_CARD,
-            corner_radius=10,
-            height=90,
-            border_width=2,
-            border_color=COR_CINZA,
+            fg_color="transparent",
+            corner_radius=0,
+            height=0,
+            border_width=0,
         )
-        self._zona_drop.pack(fill="x", padx=16, pady=(0, 8))
+        self._zona_drop.pack(fill="x", padx=16)
         self._zona_drop.pack_propagate(False)
 
         self._lbl_drop = ctk.CTkLabel(
@@ -922,12 +921,7 @@ class ValidadorApp(ctk.CTk):
         self._arquivo_json = caminho
         nome = caminho.name
         self._lbl_arquivo.configure(text=nome, text_color=COR_INFO)
-        self._lbl_drop.configure(
-            text=f"✔  {nome}",
-            text_color=COR_OK,
-            font=ctk.CTkFont(size=10, weight="bold"),
-        )
-        self._zona_drop.configure(border_color=COR_OK)
+        self._lbl_drop.configure(text="", text_color=COR_OK)
 
     def _limpar(self):
         self._arquivo_json = None
@@ -937,7 +931,6 @@ class ValidadorApp(ctk.CTk):
             text_color=COR_CINZA,
             font=ctk.CTkFont(size=11),
         )
-        self._zona_drop.configure(border_color=COR_CINZA)
         # Limpa estado do log
         self._atos_log = []
         self._arquivo_log = None
