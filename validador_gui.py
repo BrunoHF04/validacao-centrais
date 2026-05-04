@@ -14,6 +14,7 @@ import tkinter.filedialog as fd
 from datetime import datetime
 from pathlib import Path
 
+import re as _re
 import customtkinter as ctk
 
 # ── Resolução de caminhos compatível com PyInstaller ──────────────────────────
@@ -31,7 +32,7 @@ import validador_signo as vs
 
 # ── Tema e paleta ─────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("dark-blue")
+ctk.set_default_color_theme("blue")
 
 COR_ERRO    = "#FF5252"
 COR_AVISO   = "#FFB300"
@@ -44,6 +45,224 @@ COR_CARD    = "#2C2C2C"
 COR_BORDA   = "#E94560"
 COR_TEXTO   = "#E0E0E0"
 COR_CINZA   = "#666666"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRADUÇÃO DE CAMPOS E MENSAGENS (linguagem amigável ao usuário)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_CAMPOS = {
+    # Campos raiz — CEP e CESDI
+    "tipoAto":                          "Tipo do Ato",
+    "naturezaAto":                      "Natureza do Ato",
+    "status":                           "Status",
+    "statusAto":                        "Status do Ato",
+    "livroInicial":                     "Livro Inicial",
+    "livroFinal":                       "Livro Final",
+    "folhaInicial":                     "Folha Inicial",
+    "folhaFinal":                       "Folha Final",
+    "dataAto":                          "Data do Ato",
+    "dataContrato":                     "Data do Contrato",
+    "dataInclusao":                     "Data de Inclusão",
+    "dataCasamento":                    "Data do Casamento",
+    "reservaDePoderes":                 "Reserva de Poderes",
+    "valorOperacao":                    "Valor da Operação",
+    "prazoPagamento":                   "Prazo de Pagamento",
+    "formaPagamento":                   "Forma de Pagamento",
+    "existeBemEdireito":                "Existência de Bem/Direito",
+    "existeBemEdireitoVinculadoAoAto":  "Existência de Bem/Direito Vinculado ao Ato",
+    "naturezaLitigio":                  "Natureza do Litígio",
+    "acordo":                           "Acordo",
+    "tipoInvalidacaoAto":               "Tipo de Invalidação do Ato",
+    "tipoAtoOrigem":                    "Tipo do Ato de Origem",
+    "municipioCartorioAtoOrigem":       "Município do Cartório de Origem",
+    "cartorioAtual":                    "Cartório Atual",
+    "cartorioNaoCadastrado":            "Cartório Não Cadastrado",
+    "regimeDeBensDireitosDoCasamento":  "Regime de Bens do Casamento",
+    "quantidadefilhosMaiores":          "Quantidade de Filhos Maiores",
+    "quantidadefilhosMenores":          "Quantidade de Filhos Menores",
+    "partes":                           "Lista de Partes",
+    "bensEdireitos":                    "Bens e Direitos",
+    "atosOrigem":                       "Atos de Origem",
+    "anexos":                           "Anexos",
+    "anexosEspecificos":                "Anexos Específicos",
+    "attachments":                      "Anexos",
+    # Campos de parte
+    "qualificacaoParte":    "Qualificação da Parte",
+    "nomeParte":            "Nome da Parte",
+    "cpf":                  "CPF/CNPJ",
+    "cpfConjuge":           "CPF do Cônjuge",
+    "cep":                  "CEP",
+    "cepResidencia":        "CEP de Residência",
+    "dataNascimento":       "Data de Nascimento",
+    "dataNascimentoParte":  "Data de Nascimento",
+    "dataEmissao":          "Data de Emissão do Documento",
+    "dataEmissaoDocumento": "Data de Emissão do Documento",
+    "dataObito":            "Data de Óbito",
+    "estadoCivil":          "Estado Civil",
+    "estadoCivilParte":     "Estado Civil",
+    "genero":               "Gênero",
+    "tipoDocumento":        "Tipo de Documento",
+    "tipoContato":          "Tipo de Contato",
+    "tipoContatoParte":     "Tipo de Contato",
+    "capacidadeCivil":      "Capacidade Civil",
+    "areaAtuacao":          "Área de Atuação",
+    "profissao":            "Profissão",
+    "regimeBens":           "Regime de Bens",
+    "municipio":            "Município",
+    "cidadeResidencia":     "Cidade de Residência",
+    "nacionalidade":        "Nacionalidade",
+    "nacionalidadeParte":   "Nacionalidade",
+    "paisOrigem":           "País de Origem",
+    "codigoPaisParte":      "Código do País",
+    "codigoPaisResidencia": "Código do País de Residência",
+    "semFiliacoes":         "Sem Filiações",
+    "naoPossuiFiliacao":    "Sem Filiação",
+    "responsavelFilhosMenores": "Responsável por Filhos Menores",
+    "filiacoes":            "Filiações",
+    # Campos de bem/direito
+    "tipoBemEdireito":              "Tipo do Bem/Direito",
+    "referenciaCadastralImovel":    "Referência Cadastral do Imóvel",
+    "cin":                          "CIN (Código Imobiliário Nacional)",
+    "valor":                        "Valor",
+    "valorFiscal":                  "Valor Fiscal",
+    "valorImovel":                  "Valor do Imóvel",
+    "valorDoBem":                   "Valor do Bem",
+    "quantidadeAreaConstruida":     "Área Construída",
+    "quantidadeAreaTotal":          "Área Total",
+    "quantidadeUnidadeAreaConstruida": "Área Construída",
+    "titulares":                    "Titulares",
+    # Campos de ato de origem
+    "numeroCns":        "Número do CNS",
+    "atosAnteriores":   "Atos Anteriores",
+    "outroCartorio":    "Outro Cartório",
+    # Campos de anexo
+    "base64Content":    "Conteúdo do Arquivo (base64)",
+    "extensaoArquivo":  "Extensão do Arquivo",
+    "nome":             "Nome do Arquivo",
+}
+
+
+def _traduzir_campo(campo: str) -> str:
+    """Converte nome técnico do campo para linguagem amigável."""
+    # Tenta correspondência exata primeiro
+    if campo in _CAMPOS:
+        return _CAMPOS[campo]
+
+    # Padrões com índice: partes[0].nomeParte, bensEdireitos[1].cin, etc.
+    m = _re.match(r"^(\w+)\[(\d+)\]\.(.+)$", campo)
+    if m:
+        pai, idx, filho = m.group(1), int(m.group(2)) + 1, m.group(3)
+        nome_pai = {
+            "partes":           "Parte",
+            "bensEdireitos":    "Bem/Direito",
+            "atosOrigem":       "Ato de Origem",
+            "attachments":      "Anexo",
+            "anexos":           "Anexo",
+            "anexosEspecificos":"Anexo Específico",
+        }.get(pai, pai)
+
+        # Filho pode ser aninhado: titulares[0].cpf
+        m2 = _re.match(r"^(\w+)\[(\d+)\]\.(.+)$", filho)
+        if m2:
+            sub_pai, sub_idx, sub_filho = m2.group(1), int(m2.group(2)) + 1, m2.group(3)
+            nome_sub = _CAMPOS.get(sub_filho, sub_filho)
+            return f"{nome_sub} — {_CAMPOS.get(sub_pai, sub_pai)} {sub_idx} do {nome_pai} {idx}"
+
+        nome_filho = _CAMPOS.get(filho, filho)
+        return f"{nome_filho} — {nome_pai} {idx}"
+
+    # Padrão lista sem filho: partes[0]
+    m = _re.match(r"^(\w+)\[(\d+)\]$", campo)
+    if m:
+        pai, idx = m.group(1), int(m.group(2)) + 1
+        nome_pai = _CAMPOS.get(pai, pai)
+        return f"{nome_pai} {idx}"
+
+    return campo
+
+
+def _traduzir_mensagem(msg: str) -> str:
+    """Converte mensagem técnica de validação para linguagem amigável."""
+    msg = msg.strip()
+
+    # Campos obrigatórios ausentes
+    if msg in (
+        "Campo inteiro obrigatório não informado.",
+        "Campo obrigatório não informado.",
+        "Campo string obrigatório está ausente ou vazio.",
+    ):
+        return "Campo obrigatório não preenchido."
+
+    # Código inválido com tabela de válidos
+    m = _re.match(r"Código (\S+) não reconhecido na tabela '(.+?)'\.(.+)", msg, _re.DOTALL)
+    if m:
+        codigo, tabela, resto = m.group(1), m.group(2), m.group(3)
+        # Extrai a lista de códigos válidos
+        m2 = _re.search(r"Códigos válidos:\s*(.+)", resto, _re.DOTALL)
+        lista = m2.group(1).strip() if m2 else ""
+        return (
+            f"O código '{codigo}' não é válido para este campo.\n"
+            f"Códigos aceitos: {lista}"
+        )
+
+    # Formato de data inválido
+    if "Formato de data inválido" in msg or "ISO 8601" in msg:
+        return "Data em formato inválido. Use o padrão AAAA-MM-DD (ex: 2024-06-01)."
+
+    # Tipo inválido — esperado inteiro
+    if "esperado inteiro" in msg.lower() or "esperado número" in msg.lower():
+        m = _re.search(r"recebid[oa]\s+(\w+)[:\s]+(.+)", msg)
+        val = f" Valor recebido: {m.group(2).strip()!r}" if m else ""
+        return f"O valor informado deve ser um número inteiro.{val}"
+
+    # Esperado string (CPF, CNPJ, CEP, CNS)
+    if "preservar zeros à esquerda" in msg or ("deve ser string" in msg and "preservar" in msg):
+        return (
+            "Este campo deve ser preenchido como texto (entre aspas), "
+            "não como número, para preservar os zeros à esquerda (ex: \"01234567\")."
+        )
+    if "deve ser string" in msg.lower():
+        return "Este campo deve ser preenchido como texto (string)."
+
+    # Tipo inválido genérico
+    if "tipo inválido" in msg.lower():
+        m = _re.search(r"recebid[oa]\s+(\w+)[:\s]+(.+)", msg, _re.IGNORECASE)
+        val = f" Recebido: {m.group(2).strip()}" if m else ""
+        return f"Tipo de dado incorreto.{val} Verifique o valor informado."
+
+    # Deve ser string com tamanho errado (CEP, CPF, etc.)
+    m = _re.match(r"(.+) tem (\d+) dígito\(s\); esperado (\d+)\. Valor: (.+)", msg)
+    if m:
+        nome, qtd, esp, val = m.group(1), m.group(2), m.group(3), m.group(4)
+        return f"{nome} inválido: informado com {qtd} dígito(s), mas deve ter {esp}. Valor: {val}"
+
+    # Esperado booleano
+    if "esperado booleano" in msg.lower():
+        m = _re.search(r"recebid[oa]:\s*(.+)", msg, _re.IGNORECASE)
+        val = f" Valor recebido: {m.group(1).strip()}" if m else ""
+        return f"Este campo deve ser verdadeiro (true) ou falso (false).{val}"
+
+    # Esperado string com tipo recebido
+    if "esperado string" in msg.lower():
+        m = _re.search(r"recebid[oa]\s+(\w+)[:\s]+(.+)", msg, _re.IGNORECASE)
+        val = f" Recebido: {m.group(2).strip()}" if m else ""
+        return f"O valor deve ser um texto (string).{val}"
+
+    # Campo de lista inválido
+    if "deve ser uma lista" in msg:
+        return "Este campo deve ser uma lista de itens."
+
+    # Nenhuma parte informada
+    if "nenhuma parte informada" in msg.lower():
+        return "Nenhuma parte foi informada no ato. Adicione ao menos uma parte."
+
+    # Campo de anexo ausente
+    if "campo de anexo vazio ou ausente" in msg.lower():
+        return "Campo obrigatório do anexo não preenchido."
+
+    # Fallback: retorna mensagem original sem alteração
+    return msg
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -596,11 +815,14 @@ class ValidadorApp(ctk.CTk):
                 self._append("erro", f"  ERROS CRÍTICOS ({len(rel.erros)})\n")
                 self._append("sep",  "  " + "─" * 56 + "\n")
                 for campo, msg in rel.erros:
+                    nome = _traduzir_campo(campo)
+                    texto_msg = _traduzir_mensagem(msg)
                     self._append("erro",  "  [ERRO]  ")
-                    self._append("campo", f"{campo}\n")
-                    for linha in msg.split("\n"):
-                        self._append("seta", "          → ")
-                        self._append("msg",  linha.strip() + "\n")
+                    self._append("campo", f"{nome}\n")
+                    for linha in texto_msg.split("\n"):
+                        if linha.strip():
+                            self._append("seta", "          → ")
+                            self._append("msg",  linha.strip() + "\n")
                     self._append("msg", "\n")
 
             # Avisos
@@ -608,11 +830,14 @@ class ValidadorApp(ctk.CTk):
                 self._append("aviso", f"  AVISOS / INCONSISTÊNCIAS ({len(rel.avisos)})\n")
                 self._append("sep",   "  " + "─" * 56 + "\n")
                 for campo, msg in rel.avisos:
+                    nome = _traduzir_campo(campo)
+                    texto_msg = _traduzir_mensagem(msg)
                     self._append("aviso", "  [AVISO] ")
-                    self._append("campo", f"{campo}\n")
-                    for linha in msg.split("\n"):
-                        self._append("seta", "          → ")
-                        self._append("msg",  linha.strip() + "\n")
+                    self._append("campo", f"{nome}\n")
+                    for linha in texto_msg.split("\n"):
+                        if linha.strip():
+                            self._append("seta", "          → ")
+                            self._append("msg",  linha.strip() + "\n")
                     self._append("msg", "\n")
 
         # Resumo
@@ -658,11 +883,33 @@ class ValidadorApp(ctk.CTk):
     # ── Carregamento das tabelas ──────────────────────────────────────────────
 
     def _carregar_tabelas(self):
-        # Redireciona prints do módulo validador para silêncio durante load
-        _stdout_bkp = sys.stdout
-        sys.stdout = io.StringIO()
+        # Diretório do executável (fora do _MEIPASS temporário)
+        if getattr(sys, "frozen", False):
+            _log_dir = Path(sys.executable).parent
+        else:
+            _log_dir = BASE_DIR
+        log_path = _log_dir / "validador_debug.log"
+
         try:
-            # Sobrescreve o BASE_DIR do módulo para apontar ao diretório correto
+            with open(log_path, "w", encoding="utf-8") as log:
+                log.write(f"BASE_DIR (MEIPASS): {BASE_DIR}\n")
+                log.write(f"CEP dir: {BASE_DIR / 'manuais' / 'CEP'} | existe: {(BASE_DIR / 'manuais' / 'CEP').exists()}\n")
+                log.write(f"CESDI dir: {BASE_DIR / 'manuais' / 'CESDI'} | existe: {(BASE_DIR / 'manuais' / 'CESDI').exists()}\n")
+                manuais_root = BASE_DIR / "manuais"
+                if manuais_root.exists():
+                    for p in manuais_root.rglob("*"):
+                        log.write(f"  arquivo: {p}\n")
+                else:
+                    log.write("  pasta manuais NAO encontrada!\n")
+        except Exception:
+            pass
+
+        _stdout_bkp = sys.stdout
+        _stderr_bkp = sys.stderr
+        buf = io.StringIO()
+        sys.stdout = buf
+        sys.stderr = buf
+        try:
             vs.BASE_DIR = BASE_DIR
             vs.MANUAIS_CEP_DIR   = BASE_DIR / "manuais" / "CEP"
             vs.MANUAIS_CESDI_DIR = BASE_DIR / "manuais" / "CESDI"
@@ -670,9 +917,17 @@ class ValidadorApp(ctk.CTk):
             self._tabelas_carregadas = True
             self.after(0, self._on_tabelas_ok)
         except Exception as e:
+            import traceback
+            msg = traceback.format_exc()
+            try:
+                with open(log_path, "a", encoding="utf-8") as log:
+                    log.write(f"\nEXCEPTION:\n{msg}\n")
+            except Exception:
+                pass
             self.after(0, self._on_tabelas_erro, str(e))
         finally:
             sys.stdout = _stdout_bkp
+            sys.stderr = _stderr_bkp
 
     def _on_tabelas_ok(self):
         self._lbl_status_tab.configure(
@@ -681,10 +936,18 @@ class ValidadorApp(ctk.CTk):
         )
 
     def _on_tabelas_erro(self, msg: str):
+        resumo = msg[:60] + "..." if len(msg) > 60 else msg
         self._lbl_status_tab.configure(
-            text=f"⚠ Erro ao carregar manuais",
+            text=f"⚠ Erro: {resumo}",
             text_color=COR_AVISO,
         )
+        log_path = BASE_DIR / "validador_debug.log"
+        if log_path.exists():
+            import os as _os
+            try:
+                _os.startfile(str(log_path))
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
