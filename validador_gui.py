@@ -335,6 +335,7 @@ class ValidadorApp(ctk.CTk):
         self._dados_atuais: dict | None = None
         self._tree_paths: dict = {}
         self._modo_estrutura: str = "graph"
+        self._zoom: float = 1.0
 
         # ── Estado do modo log ────────────────────────────────────────────────
         self._atos_log: list = []
@@ -847,11 +848,41 @@ class ValidadorApp(ctk.CTk):
         self._canvas.configure(yscrollcommand=vsb_g.set, xscrollcommand=hsb_g.set)
         vsb_g.pack(side="right",  fill="y")
         hsb_g.pack(side="bottom", fill="x")
+
+        # ── Barra de zoom (flutuante no rodapé do canvas) ─────────────────────
+        zoom_bar = tk.Frame(self._frame_graph, bg="#21262D", pady=4)
+        zoom_bar.pack(side="bottom", fill="x")
+
+        _zoom_btn_cfg = dict(
+            width=38, height=28, corner_radius=6,
+            fg_color="#30363D", hover_color="#3D444D",
+            text_color="#C8C8C8", font=ctk.CTkFont(size=13),
+        )
+        ctk.CTkButton(zoom_bar, text="−", **_zoom_btn_cfg,
+                      command=self._zoom_out).pack(side="left", padx=(8, 2), pady=2)
+        ctk.CTkButton(zoom_bar, text="+", **_zoom_btn_cfg,
+                      command=self._zoom_in).pack(side="left", padx=2, pady=2)
+
+        self._lbl_zoom = ctk.CTkLabel(zoom_bar, text="100%",
+                                      font=ctk.CTkFont(size=11),
+                                      text_color="#888888", width=42)
+        self._lbl_zoom.pack(side="left", padx=4)
+
+        ctk.CTkButton(zoom_bar, text="⊡", **_zoom_btn_cfg,
+                      command=self._zoom_fit,
+                      font=ctk.CTkFont(size=14)).pack(side="left", padx=(8, 2), pady=2)
+        ctk.CTkButton(zoom_bar, text="1:1", width=44, height=28, corner_radius=6,
+                      fg_color="#30363D", hover_color="#3D444D",
+                      text_color="#C8C8C8", font=ctk.CTkFont(size=11),
+                      command=self._zoom_reset).pack(side="left", padx=2, pady=2)
+
         self._canvas.pack(fill="both", expand=True)
         self._canvas.bind("<MouseWheel>",
             lambda e: self._canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
         self._canvas.bind("<Shift-MouseWheel>",
             lambda e: self._canvas.xview_scroll(-1 if e.delta > 0 else 1, "units"))
+        self._canvas.bind("<Control-MouseWheel>",
+            lambda e: self._zoom_in() if e.delta > 0 else self._zoom_out())
 
         # ── Frame do Tree (treeview ttk) ──────────────────────────────────────
         self._frame_tree = tk.Frame(parent, bg=COR_BG)
@@ -1002,81 +1033,124 @@ class ValidadorApp(ctk.CTk):
             self._draw_json_graph(child, ce, ca)
 
     def _draw_one_card(self, card: dict, ce: set, ca: set):
-        x, y, w = card["x"], card["y"], self._CARD_W
-        path = card["path"]
+        z  = self._zoom
+        x  = card["x"] * z
+        y  = card["y"] * z
+        w  = self._CARD_W  * z
+        mh = self._CARD_MH * z
+        rh = self._ROW_H   * z
+        fs = max(6, round(9 * z))
+
+        path  = card["path"]
         has_e = path in ce
         has_a = path in ca
         border = COR_ERRO if has_e else (COR_AVISO if has_a else "#3A3A3A")
         bw = 2 if (has_e or has_a) else 1
 
-        total_h = card["h"]
-        # Sombra / fundo total
-        self._canvas.create_rectangle(x, y, x + w, y + total_h,
+        self._canvas.create_rectangle(x, y, x + w, y + card["h"] * z,
                                       fill="#161B22", outline=border, width=bw)
-        # Cabeçalho
         head_fill = "#3D1010" if has_e else ("#2A2200" if has_a else "#21262D")
         self._canvas.create_rectangle(x + bw - 1, y + bw - 1,
-                                      x + w - bw + 1, y + self._CARD_MH,
+                                      x + w - bw + 1, y + mh,
                                       fill=head_fill, outline="")
-        self._canvas.create_line(x + 1, y + self._CARD_MH,
-                                 x + w - 1, y + self._CARD_MH, fill=border)
-        title = card["title"]
+        self._canvas.create_line(x + 1, y + mh, x + w - 1, y + mh, fill=border)
+        title   = card["title"]
         if len(title) > 24: title = title[:23] + "…"
         title_c = COR_ERRO if has_e else (COR_AVISO if has_a else "#C8C8C8")
-        self._canvas.create_text(x + 10, y + self._CARD_MH // 2, text=title,
+        self._canvas.create_text(x + 10 * z, y + mh / 2, text=title,
                                  anchor="w", fill=title_c,
-                                 font=("Consolas", 9, "bold"))
+                                 font=("Consolas", fs, "bold"))
 
-        # Linhas de campo
         for i, (name, val, color, child_card) in enumerate(card["fields"]):
-            fy = y + self._CARD_MH + i * self._ROW_H
+            fy = y + mh + i * rh
             field_path = f"{path}.{name}" if path else name
             if field_path in ce:
                 row_bg, name_c, val_c = "#2D0D0D", COR_ERRO, "#FF8A80"
             elif field_path in ca:
                 row_bg, name_c, val_c = "#2A2200", COR_AVISO, "#FFD180"
             else:
-                row_bg  = "#161B22" if i % 2 == 0 else "#1C2128"
-                name_c  = "#9CDCFE"
-                val_c   = color
+                row_bg = "#161B22" if i % 2 == 0 else "#1C2128"
+                name_c, val_c = "#9CDCFE", color
 
-            self._canvas.create_rectangle(x + 1, fy, x + w - 1, fy + self._ROW_H,
+            self._canvas.create_rectangle(x + 1, fy, x + w - 1, fy + rh,
                                           fill=row_bg, outline="")
-            self._canvas.create_line(x + 1, fy + self._ROW_H,
-                                     x + w - 1, fy + self._ROW_H, fill="#21262D")
+            self._canvas.create_line(x + 1, fy + rh, x + w - 1, fy + rh, fill="#21262D")
 
             mn = name if len(name) <= 17 else name[:16] + "…"
-            self._canvas.create_text(x + 8, fy + self._ROW_H // 2, text=mn,
-                                     anchor="w", fill=name_c, font=("Consolas", 9))
+            self._canvas.create_text(x + 8 * z, fy + rh / 2, text=mn,
+                                     anchor="w", fill=name_c, font=("Consolas", fs))
             if child_card is None:
                 sv = str(val)
                 sv = sv if len(sv) <= 17 else sv[:16] + "…"
-                self._canvas.create_text(x + w - 8, fy + self._ROW_H // 2, text=sv,
-                                         anchor="e", fill=val_c, font=("Consolas", 9))
+                self._canvas.create_text(x + w - 8 * z, fy + rh / 2, text=sv,
+                                         anchor="e", fill=val_c, font=("Consolas", fs))
             else:
-                self._canvas.create_text(x + w - 10, fy + self._ROW_H // 2,
-                                         text="›", anchor="e",
-                                         fill="#555555", font=("Consolas", 11))
+                self._canvas.create_text(x + w - 10 * z, fy + rh / 2,
+                                         text="›", anchor="e", fill="#555555",
+                                         font=("Consolas", max(8, round(11 * z))))
 
     def _draw_connections(self, card: dict):
+        z = self._zoom
         for i, (_, __, ___, child_card) in enumerate(card["fields"]):
             if child_card is None:
                 continue
-            fy = card["y"] + self._CARD_MH + i * self._ROW_H + self._ROW_H // 2
-            fx = card["x"] + self._CARD_W
-            ty = child_card["y"] + child_card["h"] // 2
-            tx = child_card["x"]
-            mx = (fx + tx) // 2
+            fy = (card["y"] + self._CARD_MH + i * self._ROW_H + self._ROW_H / 2) * z
+            fx = (card["x"] + self._CARD_W) * z
+            ty = (child_card["y"] + child_card["h"] / 2) * z
+            tx =  child_card["x"] * z
+            mx = (fx + tx) / 2
             self._canvas.create_line(fx, fy, mx, fy, mx, ty, tx, ty,
                                      fill="#30363D", width=1, smooth=True)
         for child in card["children"]:
             self._draw_connections(child)
+
+    # ── Controles de zoom ─────────────────────────────────────────────────────
+
+    def _zoom_in(self):
+        self._zoom = min(3.0, round(self._zoom * 1.25, 2))
+        self._redraw_graph()
+
+    def _zoom_out(self):
+        self._zoom = max(0.2, round(self._zoom / 1.25, 2))
+        self._redraw_graph()
+
+    def _zoom_reset(self):
+        self._zoom = 1.0
+        self._redraw_graph()
+
+    def _zoom_fit(self):
+        if not self._dados_atuais or not hasattr(self, "_canvas"):
+            return
+        self._canvas.update_idletasks()
+        bbox = self._canvas.bbox("all")
+        if not bbox:
+            return
+        content_w = bbox[2] - bbox[0]
+        content_h = bbox[3] - bbox[1]
+        cw = max(1, self._canvas.winfo_width()  - 20)
+        ch = max(1, self._canvas.winfo_height() - 20)
+        if content_w > 0 and content_h > 0:
+            ajuste = min(cw / content_w, ch / content_h)
+            self._zoom = max(0.2, min(3.0, round(self._zoom * ajuste, 2)))
+        self._redraw_graph()
+
+    def _redraw_graph(self):
+        if not hasattr(self, "_lbl_zoom"):
+            return
+        self._lbl_zoom.configure(text=f"{round(self._zoom * 100)}%")
+        if self._dados_atuais and self._modo_estrutura == "graph":
+            ce = getattr(self, "_last_campos_erro",  set())
+            ca = getattr(self, "_last_campos_aviso", set())
+            self._popular_tree(self._dados_atuais, ce, ca)
 
     # ── Toggle Graph / Tree ───────────────────────────────────────────────────
 
     def _trocar_modo_estrutura(self, modo: str):
         self._modo_estrutura = modo
         if modo == "graph":
+            self._zoom = 1.0
+            if hasattr(self, "_lbl_zoom"):
+                self._lbl_zoom.configure(text="100%")
             self._frame_tree.pack_forget()
             self._frame_graph.pack(fill="both", expand=True)
             self._btn_modo_graph.configure(fg_color=COR_BORDA, text_color="white",
