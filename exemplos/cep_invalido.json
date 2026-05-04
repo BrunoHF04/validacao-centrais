@@ -1,0 +1,84 @@
+{
+    "tipoAto": 999,
+    "tipoInvalidacaoAto": 0,
+    "naturezaAto": 888,
+    "status": "ATIVO",
+    "observacaoInvalidacao": "",
+    "dataAto": "01/06/2024",
+    "livroInicial": "1451",
+    "complementoLivroInicial": "F",
+    "livroFinal": 1451,
+    "complementoLivroFinal": "F",
+    "folhaFinal": 4,
+    "valorOperacao": "R$ 350.000,00",
+    "prazoPagamento": 0,
+    "formaPagamento": 6,
+    "dataContrato": "15-05-2024",
+    "reservaDePoderes": "sim",
+    "naturezaLitigio": 0,
+    "acordo": 0,
+
+    "partes": [
+        {
+            "areaAtuacao": 16,
+            "bairro": "Jardim América",
+            "capacidadeCivil": 1,
+            "cep": 1310100,
+            "complemento": "Apto 42",
+            "contato": "(11)99999-1234",
+            "cpf": 52756472042,
+            "cpfConjuge": 88653911707,
+            "dataCasamento": "10/03/2015",
+            "dataEmissao": "2019-04-16",
+            "dataNascimento": "1985-06-15",
+            "documento": "327898276",
+            "email": "joao.silva@email.com.br",
+            "estadoCivil": 1,
+            "filiacoes": "Ana Maria/José Carlos",
+            "genero": 1,
+            "logradouro": "Avenida Paulista",
+            "municipio": 355030,
+            "nomeConjuge": "Maria Oliveira da Silva",
+            "numero": "1578",
+            "paisOrigem": 1,
+            "qualificacaoParte": 999,
+            "regimeBens": 1,
+            "semFiliacoes": "false",
+            "tipoContato": 1,
+            "tipoDocumento": 8,
+            "uf": "SP"
+        }
+    ],
+
+    "bensEdireitos": [
+        {
+            "cep": 58052519,
+            "cin": 12345,
+            "valor": "R$ 350.000,00",
+            "valorImovel": "350000",
+            "titulares": [
+                {
+                    "cpf": 52756472042,
+                    "nomeTitular": "João Carlos da Silva",
+                    "tipoDocumento": 8
+                }
+            ]
+        }
+    ],
+
+    "atosOrigem": [
+        {
+            "numeroCns": 1234567890,
+            "cartorioAtual": "verdadeiro",
+            "outroCartorio": 1
+        }
+    ],
+
+    "attachments": [
+        {
+            "base64Content": "",
+            "extensaoArquivo": "",
+            "nome": ""
+        }
+    ]
+}

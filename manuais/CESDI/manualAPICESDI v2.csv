@@ -1,0 +1,32 @@
+﻿ORIENTAÇÕES;;
+;;
+Endpoints completos para envio e retificação CESDI:;;
+https://backend.signo.org.br/api/ato/envio-ato-cesdi-api;;
+https://backend.signo.org.br/api/ato/envio-ato-cesdi-api/retificacao;Somente para retificação de INCLUSÃO de atos em quinzenas fechadas;
+;;
+;;
+Informações do Recurso:;;
+Formato dos parâmetros de entrada;JSON;Método [POST]:
+Formato da resposta;JSON;
+Requer Autenticação;SIM;Os cartórios que ainda não fazem uso de nenhuma API do sistema terão que entrar em contato com os administradores do sistema SIGNO para solicitarem o token de autenticação
+;;
+;;
+Composição do Cabeçalho da requisição:;;
+Content-Type;application/json;
+Authorization;“Bearer ” + TOKEN;
+;;
+;;
+Possíveis respostas da api:;;
+Ok – Ato cadastrado com sucesso e na resposta será enviada o o identificador do ato salvo na base dados do sistema Signo;200;
+Created;201;
+Unauthorized – Quando não foi enviado um token válido no cabeçalho da requisição;401;
+Forbiden – Erro durante a validação dos dados do ato da central Cesdi. Nesse caso, será enviado um aviso informando o erro no atributo;403;
+Not found;404;
+Erro no servidor;500;
+;;
+;;
+Parâmetros de retorno:;;
+Parâmetros;Tipo de Dado;Informações
+idAto;Integer;Contém o identificador do ato quando salvo na base de dados do sistema Signo
+avisos;List<String>;Pode conter avisos
+partesAlteradas;List<ParteDTO>;Contém as informações das partes alteradas, caso as partes cadastradas no ato já possuíam cadastro na base de dados do Signo

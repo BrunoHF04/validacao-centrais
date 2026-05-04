@@ -1,0 +1,140 @@
+{
+
+    "tipoAto": 0,
+    "statusAto": 0,
+    "dataAto": "string",
+    "livroInicial": 0,
+    "complementoLivroInicial": "string",
+    "livroFinal": 0,
+    "complementoLivroFinal": "string",
+    "folhaInicial": 0,
+    "complementoFolhaInicial": "string",
+    "folhaFinal": 0,
+    "complementoFolhaFinal": "string",
+    "valorOperacao": 0
+    "prazoPagamento": 0,
+    "formaPagamento": 0,
+    "dataContrato": "string",
+
+    "regimeDeBensDireitosDoCasamento": 0,
+    "quantidadefilhosMaiores": 0,
+    "quantidadefilhosMenores": 0,
+    "dataCasamento": "string",
+    "existeBemEdireitoVinculadoAoAto": "string",
+
+    "estadoCartorioAtoOrigem": "string",
+    "municipioCartorioAtoOrigem": 0,
+    "cartorioAtual": true,
+    "cartorio": "string",
+    "cartorioNaoCadastrado": true,
+    "informacoesAtoOrigem": "string",
+    "tipoAtoOrigem": 0,
+    "livroInicialAtoOrigem": 0,
+    "complementoLivroInicialAtoOrigem": "string",
+    "livroFinalAtoOrigem": 0,
+    "complementoLivroFinalAtoOrigem": "string",
+    "folhaInicialAtoOrigem": 0,
+    "complementoFolhaInicialAtoOrigem": "string",
+    "folhaFinalAtoOrigem": 0,
+    "complementoFolhaFinalAtoOrigem": "string",
+
+    "partes": [{
+            "qualificacaoParte": 0,
+            "cpf": "string",
+            "tipoDocumento": 0,
+            "numeroDocumento": "string",
+            "orgaoEmissor": "string",
+            "estadoOAB": "string",
+            "dataEmissaoDocumento": "string",
+            "dataNascimentoParte": "string",
+            "genero": 0,
+            "nomeParte": "string",
+            "nomeSocialParte": "string",
+            "nacionalidadeParte": 0,
+            "codigoPaisParte": 0,
+            "ufOrigem": "string",
+            "categoriaParte": 0,
+            "profissaoParte": "string",
+            "capacidadeCivil": 0,
+            "dataObito": "string",
+            "responsavelFilhosMenores": true,
+            "naoPossuiFiliacao": true,
+            "filiacoes": [
+                "string"
+            ],
+            "estadoCivilParte": 0,
+
+            "dataCasamento": "string",
+            "cpfConjuge": "string",
+            "nomeConjuge": "string",
+            "regimeDeBensDireitosDoCasamento": 0,
+
+            "cepResidencia": "string",
+            "logradouroResidencia": "string",
+            "numeroResidencia": "string",
+            "complementoResidencia": "string",
+            "bairroResidencia": "string",
+            "cidadeResidencia": 0,
+            "ufResidencia": "string"
+            "codigoPaisResidencia": 0,
+
+            "emailParte": "string",
+            "tipoContatoParte": 0,
+            "contatoParte": "string",
+
+        }
+    ],
+
+    "bensEdireitos": [{
+            "tipoBemEdireito": 0,
+            "descricaoDoBem": "string",
+            "varaJudicial": "string"
+            "numeroProcesso": "string",
+            "numeroPrecatorio": "string",
+            "valorDoBem": 0,
+            "titulares": [{
+                    "cpf": "string",
+                    "nomeTitular": "string",
+                    "numeroDocumento": "string",
+                    "tipoDocumento": 0
+                }
+            ],
+            "cin": "string",
+            "referenciaCadastralImovel": 0,
+            "numeroCadastroImovel": "string",
+            "tipoImovel": 0,
+            "acessaoImovel": 0,
+            "tipoUnidadeAreaTotal": 0,
+            "quantidadeAreaTotal": 0,
+            "tipoUnidadeAreaConstruida": 0,
+            "quantidadeUnidadeAreaConstruida": 0,
+            "valorImovel": 0,
+            "tipoTributo": 0,
+            "valorFiscal": 0,
+            "cnm": "string",
+            "cep": "string",
+            "logradouro": "string",
+            "numero": "string",
+            "complemento": "string",
+            "bairro": "string",
+            "cidade": 0,
+            "siglaUF": "string",
+
+        }
+    ],
+
+    "anexos": [{
+            "base64Content": "string",
+            "extensaoArquivo": "string",
+            "nome": "string"
+        }
+    ],
+
+    "anexosEspecificos": [{
+            "base64Content": "string",
+            "extensaoArquivo": "string",
+            "nome": "string"
+        }
+    ],
+
+}

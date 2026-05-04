@@ -1,0 +1,58 @@
+{
+    "tipoAto": 999,
+    "statusAto": "ATIVO",
+    "dataAto": "01-06-2024",
+    "livroInicial": "112",
+    "complementoLivroInicial": "T",
+    "folhaFinal": 12,
+    "valorOperacao": "R$ 120.000,00",
+    "prazoPagamento": 1,
+    "formaPagamento": 2,
+    "dataContrato": "14/05/2024",
+    "regimeDeBensDireitosDoCasamento": 1,
+    "quantidadefilhosMaiores": 1,
+    "quantidadefilhosMenores": 2,
+    "dataCasamento": "22/07/2015",
+    "existeBemEdireitoVinculadoAoAto": 1,
+    "cartorioAtual": "sim",
+
+    "partes": [
+        {
+            "qualificacaoParte": 777,
+            "cpf": 22222222222,
+            "tipoDocumento": 1724,
+            "dataEmissaoDocumento": "20/02/2016",
+            "dataNascimentoParte": "1995-04-14",
+            "genero": "FEMININO",
+            "nomeParte": "",
+            "responsavelFilhosMenores": "sim",
+            "naoPossuiFiliacao": 0,
+            "filiacoes": "Aline Moraes / Antonio Fagundes",
+            "cepResidencia": 32670275,
+            "cpfConjuge": 48513471038
+        }
+    ],
+
+    "bensEdireitos": [
+        {
+            "tipoBemEdireito": 9999,
+            "valorDoBem": "450.000",
+            "titulares": [
+                {
+                    "cpf": 22222222222,
+                    "nomeTitular": "Pedro Gustavo Mendes"
+                }
+            ],
+            "referenciaCadastralImovel": 9999,
+            "cep": 17120970
+        }
+    ],
+
+    "anexos": [
+        {
+            "base64Content": "",
+            "extensaoArquivo": "",
+            "nome": ""
+        }
+    ]
+}

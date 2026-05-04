@@ -1,0 +1,230 @@
+{
+
+    "tipoAto": 0,
+    "tipoInvalidacaoAto": 0,
+    "naturezaAto": 0,
+    "status": 0,
+    "observacaoInvalidacao": "string",
+    "dataAto": "string",
+    "livroInicial": 0,
+    "complementoLivroInicial": "string",
+    "livroFinal": 0,
+    "complementoLivroFinal": "string",
+    "folhaInicial": 0,
+    "complementoFolhaInicial": "string",
+    "folhaFinal": 0,
+    "complementoFolhaFinal": "string",
+    "valorOperacao": 0
+    "prazoPagamento": 0,
+    "formaPagamento": 0,
+    "dataContrato": "string",
+    "dataInclusao": "2022-09-05T02:28:13.362Z",
+
+    "existeBemEdireito": 0,
+    "reservaDePoderes": true,
+    "naturezaLitigio": 0,
+    "acordo": 0,
+
+    "partes": [{
+            "areaAtuacao": 0,
+            "bairro": "string",
+            "capacidadeCivil": 0,
+            "cep": "string",
+            "complemento": "string",
+            "contato": "string",
+            "cpf": "string",
+            "cpfConjuge": "string",
+            "dataCasamento": "string",
+            "dataEmissao": "string",
+            "dataNascimento": "string",
+            "documento": "string",
+            "email": "string",
+            "estadoCivil": 0,
+            "filiacoes": [
+                "string"
+            ],
+            "genero": 0,
+            "inscricaoEstadual": "string",
+            "logradouro": "string",
+            "municipio": 0,
+            "nacionalidade": 0,
+            "nomeConjuge": "string",
+            "nomeParte": "string",
+            "nomeSocial": "string",
+            "numero": "string",
+            "orgaoEmissor": "string",
+            "paisOrigem": 0,
+            "profissao": 0,
+            "qualificacaoParte": 0,
+            "regimeBens": 0,
+            "semFiliacoes": true,
+            "tipoContato": 0,
+            "tipoDocumento": 0,
+            "uf": "string"
+        }
+    ],
+
+    "bensEdireitos": [{
+            "acessao": 0,
+            "bairro": "string",
+            "cep": "string",
+            "cin": "string",
+            "cnm": "string",
+            "complemento": "string",
+            "descricaoBenseDireitos": "string",
+            "idCidade": 0,
+            "idEstado": "string",
+            "logradouro": "string",
+            "numero": "string",
+            "numeroCadastralImovel": "string",
+            "numeroPrecatorio": "string",
+            "numeroProcesso": "string",
+            "qualificacaodeBens": 0,
+            "quantidadeAreaConstruida": 0,
+            "quantidadeAreaTotal": 0,
+            "referenciaCadastralImovel": 0,
+            "tipoImovel": 0,
+            "tipoTributo": 0,
+            "titulares": [{
+                    "cpf": "string",
+                    "nomeTitular": "string",
+                    "numeroDocumento": "string",
+                    "tipoDocumento": 0
+                }
+            ],
+            "unidadeAreaConstruida": 0,
+            "unidadeAreaTotal": 0,
+            "valor": 0,
+            "valorFiscal": 0,
+            "valorImovel": 0,
+            "varaJudicial": "string"
+        }
+    ],
+
+    "atosOrigem": [{
+            "atosAnteriores": true,
+            "cartorioAtual": true,
+            "complementoFolhaFinalAtoOrigem": "string",
+            "complementoFolhaInicialAtoOrigem": "string",
+            "complementoLivroFinalAtoOrigem": "string",
+            "complementoLivroInicialAtoOrigem": "string",
+            "folhaFinalAtoOrigem": 0,
+            "folhaInicialAtoOrigem": 0,
+            "idEstadoCartorio": "string",
+            "idMunicipioCartorio": 0,
+            "livroFinalAtoOrigem": 0,
+            "livroInicialAtoOrigem": 0,
+            "naturezaAtoOrigem": 0,
+            "numeroCns": "string",
+            "observacoesOutroCartorio": "string",
+            "outroCartorio": true,
+            "tipoAtoOrigem": 0
+        }
+    ],
+
+    "informacoesPrecatorios": [{
+            "beneficiarios": [{
+                    "cpfParte": "string",
+                    "documento": "string",
+                    "nomeParte": "string",
+                    "qualificacaoParte": 0,
+                    "tipoDocumento": 0
+                }
+            ],
+            "descricaoPrecatorio": "string",
+            "numeroOficioRequisitorio": "string",
+            "numeroProcesso": "string",
+            "tribunalPrecatorio": "string",
+            "valorGlobalPrecatorio": 0,
+            "varaOrigem": "string"
+        }
+    ],
+
+    "cessoesPrecatorios": [{
+            "alienacao": 0,
+            "informacaoPrecatorio": {
+                "beneficiarios": [{
+                        "cpfParte": "string",
+                        "documento": "string",
+                        "nomeParte": "string",
+                        "qualificacaoParte": 0,
+                        "tipoDocumento": 0
+                    }
+                ],
+                "descricaoPrecatorio": "string",
+                "numeroOficioRequisitorio": "string",
+                "numeroProcesso": "string",
+                "tribunalPrecatorio": "string",
+                "valorGlobalPrecatorio": 0,
+                "varaOrigem": "string"
+            },
+            "partesDaCessao": [{
+                    "cpfParte": "string",
+                    "documento": "string",
+                    "nomeParte": "string",
+                    "qualificacaoParte": 0,
+                    "tipoDocumento": 0
+                }
+            ]
+        }
+    ],
+
+    "cessoesAnteriores": [{
+            "cessaoNaoOriginaria": {
+                "alienacao": 0,
+                "informacaoPrecatorio": {
+                    "beneficiarios": [{
+                            "cpfParte": "string",
+                            "documento": "string",
+                            "nomeParte": "string",
+                            "qualificacaoParte": 0,
+                            "tipoDocumento": 0
+                        }
+                    ],
+                    "descricaoPrecatorio": "string",
+                    "numeroOficioRequisitorio": "string",
+                    "numeroProcesso": "string",
+                    "tribunalPrecatorio": "string",
+                    "valorGlobalPrecatorio": 0,
+                    "varaOrigem": "string"
+                },
+                "partesDaCessao": [{
+                        "cpfParte": "string",
+                        "documento": "string",
+                        "nomeParte": "string",
+                        "qualificacaoParte": 0,
+                        "tipoDocumento": 0
+                    }
+                ]
+            },
+            "tipoAto": 0,
+            "ufCartorio": "string"
+            "municipioCartorio": 0,
+            "cnsCartorio": "string",
+            "livroInicial": 0,
+            "complementoLivroInicial": "string",
+            "livroFinal": 0,
+            "complementoLivroFinal": "string",
+            "folhaInicial": 0,
+            "complementoFolhaInicial": "string",
+            "folhaFinal": 0,
+            "complementoFolhaFinal": "string",
+            "dataAtoAnterior": "string",
+            "alienacao": 0,	
+            "partesCessao": [{
+                    "cpfParte": "string",
+                    "nomeParte": "string",
+                    "qualificacaoParte": 0
+                }
+            ],
+        }
+    ],
+
+    "attachments": [{
+            "base64Content": "string",
+            "extensaoArquivo": "string",
+            "nome": "string"
+        }
+    ],
+
+}
