@@ -474,7 +474,7 @@ class ValidadorApp(ctk.CTk):
 
         # Cabeçalho do painel
         top = ctk.CTkFrame(frame, fg_color=COR_CARD, corner_radius=8, height=40)
-        top.pack(fill="x", padx=12, pady=(12, 8))
+        top.pack(fill="x", padx=12, pady=(12, 4))
         top.pack_propagate(False)
 
         ctk.CTkLabel(
@@ -492,41 +492,27 @@ class ValidadorApp(ctk.CTk):
         )
         self._lbl_timestamp.pack(side="right", padx=12)
 
-        # Área de texto com scrollbar
-        self._txt_resultado = tk.Text(
+        # ── Abas Simplificado / Técnico ───────────────────────────────────────
+        abas = ctk.CTkTabview(
             frame,
-            bg="#0D1117",
-            fg=COR_TEXTO,
-            font=("Consolas", 11),
-            relief="flat",
-            bd=0,
-            padx=14,
-            pady=10,
-            wrap="word",
-            state="disabled",
-            selectbackground="#3D3D3D",
-            insertbackground=COR_TEXTO,
+            fg_color="#0D1117",
+            segmented_button_fg_color=COR_CARD,
+            segmented_button_selected_color=COR_BORDA,
+            segmented_button_selected_hover_color="#C0392B",
+            segmented_button_unselected_color=COR_CARD,
+            segmented_button_unselected_hover_color="#3A3A3A",
+            text_color=COR_TEXTO,
+            text_color_disabled=COR_CINZA,
+            corner_radius=8,
         )
+        abas.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        abas.add("Simplificado")
+        abas.add("Técnico")
 
-        scrollbar = ctk.CTkScrollbar(frame, command=self._txt_resultado.yview)
-        self._txt_resultado.configure(yscrollcommand=scrollbar.set)
+        self._txt_resultado  = self._criar_area_texto(abas.tab("Simplificado"))
+        self._txt_tecnico    = self._criar_area_texto(abas.tab("Técnico"))
 
-        scrollbar.pack(side="right", fill="y", padx=(0, 8), pady=8)
-        self._txt_resultado.pack(fill="both", expand=True, padx=(12, 0), pady=(0, 8))
-
-        # Tags de cor
-        self._txt_resultado.tag_configure("erro",   foreground=COR_ERRO,   font=("Consolas", 11, "bold"))
-        self._txt_resultado.tag_configure("aviso",  foreground=COR_AVISO)
-        self._txt_resultado.tag_configure("ok",     foreground=COR_OK)
-        self._txt_resultado.tag_configure("info",   foreground=COR_INFO)
-        self._txt_resultado.tag_configure("titulo", foreground=COR_TITULO,  font=("Consolas", 12, "bold"))
-        self._txt_resultado.tag_configure("sep",    foreground="#444444")
-        self._txt_resultado.tag_configure("cinza",  foreground=COR_CINZA)
-        self._txt_resultado.tag_configure("campo",  foreground="#CE9178")
-        self._txt_resultado.tag_configure("seta",   foreground=COR_CINZA)
-        self._txt_resultado.tag_configure("msg",    foreground="#D4D4D4")
-
-        # Mensagem inicial
+        # Mensagem inicial em ambas as abas
         self._escrever_inicial()
 
         # ── Barra de resumo (rodapé do painel) ───────────────────────────────
@@ -680,6 +666,42 @@ class ValidadorApp(ctk.CTk):
             corner_radius=10,
         ).pack(fill="x", padx=24, pady=(0, 20))
 
+    def _criar_area_texto(self, container) -> tk.Text:
+        """Cria uma área de texto com scrollbar dentro do container dado."""
+        wrapper = ctk.CTkFrame(container, fg_color="transparent")
+        wrapper.pack(fill="both", expand=True)
+
+        txt = tk.Text(
+            wrapper,
+            bg="#0D1117",
+            fg=COR_TEXTO,
+            font=("Consolas", 11),
+            relief="flat",
+            bd=0,
+            padx=14,
+            pady=10,
+            wrap="word",
+            state="disabled",
+            selectbackground="#3D3D3D",
+            insertbackground=COR_TEXTO,
+        )
+        sb = ctk.CTkScrollbar(wrapper, command=txt.yview)
+        txt.configure(yscrollcommand=sb.set)
+        sb.pack(side="right", fill="y", padx=(0, 4), pady=4)
+        txt.pack(side="left", fill="both", expand=True, pady=4)
+
+        txt.tag_configure("erro",   foreground=COR_ERRO,   font=("Consolas", 11, "bold"))
+        txt.tag_configure("aviso",  foreground=COR_AVISO)
+        txt.tag_configure("ok",     foreground=COR_OK)
+        txt.tag_configure("info",   foreground=COR_INFO)
+        txt.tag_configure("titulo", foreground=COR_TITULO,  font=("Consolas", 12, "bold"))
+        txt.tag_configure("sep",    foreground="#444444")
+        txt.tag_configure("cinza",  foreground=COR_CINZA)
+        txt.tag_configure("campo",  foreground="#CE9178")
+        txt.tag_configure("seta",   foreground=COR_CINZA)
+        txt.tag_configure("msg",    foreground="#D4D4D4")
+        return txt
+
     def _rodape(self):
         rod = ctk.CTkFrame(self, fg_color=COR_CARD, corner_radius=0, height=28)
         rod.pack(fill="x", side="bottom")
@@ -742,10 +764,12 @@ class ValidadorApp(ctk.CTk):
         self._lbl_resumo_avisos.configure(text="")
         self._lbl_resumo_ok.configure(text="")
         self._lbl_timestamp.configure(text="")
-        self._txt_resultado.configure(state="normal")
-        self._txt_resultado.delete("1.0", "end")
+        for txt in (self._txt_resultado, self._txt_tecnico):
+            txt.configure(state="normal")
+            txt.delete("1.0", "end")
         self._escrever_inicial()
-        self._txt_resultado.configure(state="disabled")
+        for txt in (self._txt_resultado, self._txt_tecnico):
+            txt.configure(state="disabled")
 
     def _executar_validacao(self):
         if self._validando:
@@ -786,70 +810,112 @@ class ValidadorApp(ctk.CTk):
     # ── Exibição dos resultados ───────────────────────────────────────────────
 
     def _escrever_inicial(self):
-        self._append("titulo", "  Validador SIGNO\n")
-        self._append("cinza",  "  Selecione o sistema (CEP ou CESDI), escolha um arquivo JSON\n")
-        self._append("cinza",  "  e clique em VALIDAR para ver o diagnóstico detalhado.\n\n")
-        self._append("sep",    "  " + "─" * 58 + "\n\n")
-        self._append("cinza",  "  Os resultados aparecerão aqui com destaque por cores:\n\n")
-        self._append("erro",   "  [ERRO]   Campo com problema crítico\n")
-        self._append("aviso",  "  [AVISO]  Inconsistência ou campo opcional incorreto\n")
-        self._append("ok",     "  [OK]     Campo validado com sucesso\n")
+        for txt in (self._txt_resultado, self._txt_tecnico):
+            txt.configure(state="normal")
+            self._append("titulo", "  Validador SIGNO\n", txt)
+            self._append("cinza",  "  Selecione o sistema (CEP ou CESDI), escolha um arquivo JSON\n", txt)
+            self._append("cinza",  "  e clique em VALIDAR para ver o diagnóstico detalhado.\n\n", txt)
+            self._append("sep",    "  " + "─" * 58 + "\n\n", txt)
+            self._append("cinza",  "  Os resultados aparecerão aqui com destaque por cores:\n\n", txt)
+            self._append("erro",   "  [ERRO]   Campo com problema crítico\n", txt)
+            self._append("aviso",  "  [AVISO]  Inconsistência ou campo opcional incorreto\n", txt)
+            self._append("ok",     "  [OK]     Campo validado com sucesso\n", txt)
+            txt.configure(state="disabled")
 
     def _exibir_relatorio(self, rel: vs.Relatorio):
-        self._txt_resultado.configure(state="normal")
-        self._txt_resultado.delete("1.0", "end")
+        for txt in (self._txt_resultado, self._txt_tecnico):
+            txt.configure(state="normal")
+            txt.delete("1.0", "end")
 
         ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         self._lbl_timestamp.configure(text=ts)
+        nome_arquivo = Path(rel.arquivo).name
 
-        # Cabeçalho
-        self._append("sep",    "  " + "═" * 58 + "\n")
-        self._append("titulo", f"  Sistema: {rel.sistema}   |   {Path(rel.arquivo).name}\n")
-        self._append("sep",    "  " + "═" * 58 + "\n\n")
+        # ── Aba Técnico ───────────────────────────────────────────────────────
+        t = self._txt_tecnico
+        self._append("sep",    "  " + "═" * 58 + "\n", t)
+        self._append("titulo", f"  Sistema: {rel.sistema}   |   {nome_arquivo}\n", t)
+        self._append("sep",    "  " + "═" * 58 + "\n\n", t)
 
         if not rel.erros and not rel.avisos:
-            self._append("ok", "  ✔  JSON VÁLIDO — Nenhum problema encontrado!\n\n")
+            self._append("ok", "  ✔  JSON VÁLIDO — Nenhum problema encontrado!\n\n", t)
         else:
-            # Erros
             if rel.erros:
-                self._append("erro", f"  ERROS CRÍTICOS ({len(rel.erros)})\n")
-                self._append("sep",  "  " + "─" * 56 + "\n")
+                self._append("erro", f"  ERROS CRÍTICOS ({len(rel.erros)})\n", t)
+                self._append("sep",  "  " + "─" * 56 + "\n", t)
+                for campo, msg in rel.erros:
+                    self._append("erro",  "  [ERRO]  ", t)
+                    self._append("campo", f"{campo}\n", t)
+                    for linha in msg.split("\n"):
+                        if linha.strip():
+                            self._append("seta", "          → ", t)
+                            self._append("msg",  linha.strip() + "\n", t)
+                    self._append("msg", "\n", t)
+            if rel.avisos:
+                self._append("aviso", f"  AVISOS / INCONSISTÊNCIAS ({len(rel.avisos)})\n", t)
+                self._append("sep",   "  " + "─" * 56 + "\n", t)
+                for campo, msg in rel.avisos:
+                    self._append("aviso", "  [AVISO] ", t)
+                    self._append("campo", f"{campo}\n", t)
+                    for linha in msg.split("\n"):
+                        if linha.strip():
+                            self._append("seta", "          → ", t)
+                            self._append("msg",  linha.strip() + "\n", t)
+                    self._append("msg", "\n", t)
+
+        self._append("sep",   "  " + "═" * 58 + "\n", t)
+        self._append("cinza", "  RESUMO:  ", t)
+        self._append("erro",  f"{len(rel.erros)} erro(s)   ", t)
+        self._append("aviso", f"{len(rel.avisos)} aviso(s)   ", t)
+        self._append("ok",    f"{len(rel.ok)} campo(s) OK\n", t)
+        self._append("sep",   "  " + "═" * 58 + "\n", t)
+
+        # ── Aba Simplificado ──────────────────────────────────────────────────
+        s = self._txt_resultado
+        self._append("sep",    "  " + "═" * 58 + "\n", s)
+        self._append("titulo", f"  Sistema: {rel.sistema}   |   {nome_arquivo}\n", s)
+        self._append("sep",    "  " + "═" * 58 + "\n\n", s)
+
+        if not rel.erros and not rel.avisos:
+            self._append("ok", "  ✔  JSON VÁLIDO — Nenhum problema encontrado!\n\n", s)
+        else:
+            if rel.erros:
+                self._append("erro", f"  ERROS CRÍTICOS ({len(rel.erros)})\n", s)
+                self._append("sep",  "  " + "─" * 56 + "\n", s)
                 for campo, msg in rel.erros:
                     nome = _traduzir_campo(campo)
                     texto_msg = _traduzir_mensagem(msg)
-                    self._append("erro",  "  [ERRO]  ")
-                    self._append("campo", f"{nome}\n")
+                    self._append("erro",  "  [ERRO]  ", s)
+                    self._append("campo", f"{nome}\n", s)
                     for linha in texto_msg.split("\n"):
                         if linha.strip():
-                            self._append("seta", "          → ")
-                            self._append("msg",  linha.strip() + "\n")
-                    self._append("msg", "\n")
-
-            # Avisos
+                            self._append("seta", "          → ", s)
+                            self._append("msg",  linha.strip() + "\n", s)
+                    self._append("msg", "\n", s)
             if rel.avisos:
-                self._append("aviso", f"  AVISOS / INCONSISTÊNCIAS ({len(rel.avisos)})\n")
-                self._append("sep",   "  " + "─" * 56 + "\n")
+                self._append("aviso", f"  AVISOS / INCONSISTÊNCIAS ({len(rel.avisos)})\n", s)
+                self._append("sep",   "  " + "─" * 56 + "\n", s)
                 for campo, msg in rel.avisos:
                     nome = _traduzir_campo(campo)
                     texto_msg = _traduzir_mensagem(msg)
-                    self._append("aviso", "  [AVISO] ")
-                    self._append("campo", f"{nome}\n")
+                    self._append("aviso", "  [AVISO] ", s)
+                    self._append("campo", f"{nome}\n", s)
                     for linha in texto_msg.split("\n"):
                         if linha.strip():
-                            self._append("seta", "          → ")
-                            self._append("msg",  linha.strip() + "\n")
-                    self._append("msg", "\n")
+                            self._append("seta", "          → ", s)
+                            self._append("msg",  linha.strip() + "\n", s)
+                    self._append("msg", "\n", s)
 
-        # Resumo
-        self._append("sep", "  " + "═" * 58 + "\n")
-        self._append("cinza", "  RESUMO:  ")
-        self._append("erro",  f"{len(rel.erros)} erro(s)   ")
-        self._append("aviso", f"{len(rel.avisos)} aviso(s)   ")
-        self._append("ok",    f"{len(rel.ok)} campo(s) OK\n")
-        self._append("sep", "  " + "═" * 58 + "\n")
+        self._append("sep",   "  " + "═" * 58 + "\n", s)
+        self._append("cinza", "  RESUMO:  ", s)
+        self._append("erro",  f"{len(rel.erros)} erro(s)   ", s)
+        self._append("aviso", f"{len(rel.avisos)} aviso(s)   ", s)
+        self._append("ok",    f"{len(rel.ok)} campo(s) OK\n", s)
+        self._append("sep",   "  " + "═" * 58 + "\n", s)
 
-        self._txt_resultado.configure(state="disabled")
-        self._txt_resultado.see("1.0")
+        for txt in (self._txt_resultado, self._txt_tecnico):
+            txt.configure(state="disabled")
+            txt.see("1.0")
 
         # Barra de resumo
         icone_e = "✘" if rel.erros else "✔"
@@ -862,23 +928,26 @@ class ValidadorApp(ctk.CTk):
         self._validando = False
 
     def _exibir_erro_json(self, mensagem: str):
-        self._txt_resultado.configure(state="normal")
-        self._txt_resultado.delete("1.0", "end")
-        self._append("erro",  "  [ERRO FATAL] JSON com sintaxe inválida\n\n")
-        self._append("msg",   f"  {mensagem}\n\n")
-        self._append("cinza", "  Verifique se o arquivo é um JSON válido e tente novamente.\n")
-        self._txt_resultado.configure(state="disabled")
+        for txt in (self._txt_resultado, self._txt_tecnico):
+            txt.configure(state="normal")
+            txt.delete("1.0", "end")
+            self._append("erro",  "  [ERRO FATAL] JSON com sintaxe inválida\n\n", txt)
+            self._append("msg",   f"  {mensagem}\n\n", txt)
+            self._append("cinza", "  Verifique se o arquivo é um JSON válido e tente novamente.\n", txt)
+            txt.configure(state="disabled")
         self._btn_validar.configure(text="▶  VALIDAR", state="normal")
         self._validando = False
 
     def _mostrar_erro_inline(self, msg: str):
-        self._txt_resultado.configure(state="normal")
-        self._txt_resultado.delete("1.0", "end")
-        self._append("aviso", f"\n  ⚠  {msg}\n")
-        self._txt_resultado.configure(state="disabled")
+        for txt in (self._txt_resultado, self._txt_tecnico):
+            txt.configure(state="normal")
+            txt.delete("1.0", "end")
+            self._append("aviso", f"\n  ⚠  {msg}\n", txt)
+            txt.configure(state="disabled")
 
-    def _append(self, tag: str, texto: str):
-        self._txt_resultado.insert("end", texto, tag)
+    def _append(self, tag: str, texto: str, widget=None):
+        alvo = widget if widget is not None else self._txt_resultado
+        alvo.insert("end", texto, tag)
 
     # ── Carregamento das tabelas ──────────────────────────────────────────────
 
