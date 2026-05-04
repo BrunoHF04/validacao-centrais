@@ -17,6 +17,47 @@ from pathlib import Path
 import re as _re
 import customtkinter as ctk
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXTRAÇÃO DE ATOS DE ARQUIVO DE LOG
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _extrair_atos_do_log(caminho_log: Path) -> list:
+    """Lê um .log do Orion/Signo e devolve lista de JSONs únicos de atos."""
+    vistos: dict = {}
+    with open(caminho_log, encoding="utf-8", errors="replace") as f:
+        for linha in f:
+            if "JSON ENTRADA >>" not in linha:
+                continue
+            idx = linha.index("JSON ENTRADA >>") + len("JSON ENTRADA >>")
+            rest = linha[idx:].strip()
+            saida_idx = rest.find(" JSON SAIDA >>")
+            if saida_idx > 0:
+                rest = rest[:saida_idx]
+            try:
+                outer = json.loads(rest)
+                entrada_str = outer.get("jsonEntrada", "")
+                sistema = outer.get("tipoComunicacaoSigno", "CEP")
+                if not entrada_str or entrada_str in vistos:
+                    continue
+                dados = json.loads(entrada_str)
+                dados["_sistema_log"] = sistema
+                vistos[entrada_str] = dados
+            except (json.JSONDecodeError, KeyError, ValueError):
+                continue
+    return list(vistos.values())
+
+
+def _label_ato(ato: dict) -> str:
+    """Retorna texto de identificação de um ato: 'Livro X  Fl. Y–Z'."""
+    liv_i = ato.get("livroInicial", "?")
+    liv_f = ato.get("livroFinal", "?")
+    fl_i  = ato.get("folhaInicial", "?")
+    fl_f  = ato.get("folhaFinal", "?")
+    livro = f"Livro {liv_i}" if liv_i == liv_f else f"Livros {liv_i}–{liv_f}"
+    folha = f"Fl. {fl_i}" if fl_i == fl_f else f"Fl. {fl_i}–{fl_f}"
+    return f"{livro}   {folha}"
+
 # ── Resolução de caminhos compatível com PyInstaller ──────────────────────────
 def _base_dir() -> Path:
     """Retorna o diretório raiz — funciona tanto em .py quanto em .exe."""
@@ -280,8 +321,8 @@ class ValidadorApp(ctk.CTk):
         super().__init__()
 
         self.title("Validador SIGNO")
-        self.geometry("960x720")
-        self.minsize(820, 600)
+        self.geometry("960x860")
+        self.minsize(820, 700)
         self.configure(fg_color=COR_BG)
 
         # Inicializa tabelas dos manuais em background (silencioso)
@@ -290,6 +331,12 @@ class ValidadorApp(ctk.CTk):
 
         self._arquivo_json: Path | None = None
         self._validando = False
+
+        # ── Estado do modo log ────────────────────────────────────────────────
+        self._atos_log: list = []
+        self._arquivo_log: Path | None = None
+        self._dados_log_ato: dict | None = None
+        self._btn_atos: list = []
 
         self._construir_ui()
         self._bind_drag_drop()
@@ -434,7 +481,52 @@ class ValidadorApp(ctk.CTk):
 
         # ── Separador ────────────────────────────────────────────────────────
         ctk.CTkFrame(frame, height=1, fg_color=COR_CARD).pack(
-            fill="x", padx=16, pady=16
+            fill="x", padx=16, pady=(16, 8)
+        )
+
+        # ── Arquivo de Log ────────────────────────────────────────────────────
+        ctk.CTkLabel(
+            frame,
+            text="Arquivo de Log",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=COR_TITULO,
+        ).pack(anchor="w", padx=20, pady=(0, 6))
+
+        ctk.CTkButton(
+            frame,
+            text="📋  Importar Log...",
+            command=self._importar_log,
+            font=ctk.CTkFont(size=12),
+            fg_color=COR_CARD,
+            hover_color="#3A3A3A",
+            border_width=1,
+            border_color=COR_INFO,
+            text_color=COR_INFO,
+            height=34,
+        ).pack(fill="x", padx=16, pady=(0, 4))
+
+        self._lbl_log = ctk.CTkLabel(
+            frame,
+            text="Nenhum log carregado",
+            font=ctk.CTkFont(size=10),
+            text_color=COR_CINZA,
+            wraplength=230,
+            justify="left",
+        )
+        self._lbl_log.pack(anchor="w", padx=20, pady=(0, 4))
+
+        self._frame_lista_atos = ctk.CTkScrollableFrame(
+            frame,
+            fg_color=COR_CARD,
+            corner_radius=8,
+            height=180,
+            scrollbar_button_color=COR_CINZA,
+            scrollbar_button_hover_color=COR_INFO,
+        )
+
+        # ── Separador ────────────────────────────────────────────────────────
+        ctk.CTkFrame(frame, height=1, fg_color=COR_CARD).pack(
+            fill="x", padx=16, pady=(8, 16)
         )
 
         # ── Botão Validar ────────────────────────────────────────────────────
@@ -736,6 +828,86 @@ class ValidadorApp(ctk.CTk):
         caminho = event.data.strip().strip("{}")
         self._definir_arquivo(Path(caminho))
 
+    # ── Importação de Log ─────────────────────────────────────────────────────
+
+    def _importar_log(self):
+        caminho = fd.askopenfilename(
+            title="Selecionar arquivo de log",
+            filetypes=[("Arquivos de log", "*.log"), ("Todos os arquivos", "*.*")],
+        )
+        if not caminho:
+            return
+        self._arquivo_log = Path(caminho)
+        self._lbl_log.configure(text="⏳ Lendo log...", text_color=COR_AVISO)
+        self.update_idletasks()
+
+        try:
+            atos = _extrair_atos_do_log(self._arquivo_log)
+        except Exception as exc:
+            self._lbl_log.configure(
+                text=f"⚠ Erro ao ler log: {exc}", text_color=COR_ERRO
+            )
+            return
+
+        self._atos_log = atos
+        self._popular_lista_atos()
+
+    def _popular_lista_atos(self):
+        """Popula o frame scrollable com um botão por ato encontrado no log."""
+        for widget in self._frame_lista_atos.winfo_children():
+            widget.destroy()
+        self._btn_atos.clear()
+
+        atos = self._atos_log
+        if not atos:
+            self._lbl_log.configure(
+                text="Nenhum ato encontrado no log.", text_color=COR_AVISO
+            )
+            self._frame_lista_atos.pack_forget()
+            return
+
+        nome = self._arquivo_log.name if self._arquivo_log else "log"
+        self._lbl_log.configure(
+            text=f"✔  {nome}  ({len(atos)} ato(s))", text_color=COR_OK
+        )
+
+        for i, ato in enumerate(atos):
+            label = _label_ato(ato)
+            btn = ctk.CTkButton(
+                self._frame_lista_atos,
+                text=label,
+                font=ctk.CTkFont(size=11),
+                anchor="w",
+                fg_color="transparent",
+                hover_color="#3A3A3A",
+                text_color=COR_TEXTO,
+                height=30,
+                corner_radius=6,
+                command=lambda idx=i: self._selecionar_ato(idx),
+            )
+            btn.pack(fill="x", padx=4, pady=2)
+            self._btn_atos.append(btn)
+
+        self._frame_lista_atos.pack(fill="x", padx=16, pady=(0, 4))
+
+    def _selecionar_ato(self, idx: int):
+        """Destaca o ato selecionado e dispara validação."""
+        for i, btn in enumerate(self._btn_atos):
+            if i == idx:
+                btn.configure(fg_color=COR_BORDA, text_color="white")
+            else:
+                btn.configure(fg_color="transparent", text_color=COR_TEXTO)
+
+        self._dados_log_ato = self._atos_log[idx]
+        sistema = self._dados_log_ato.get("_sistema_log", "CEP")
+        self._var_sistema.set(sistema)
+
+        if self._validando:
+            return
+        self._validando = True
+        self._btn_validar.configure(text="⏳  Validando...", state="disabled")
+        threading.Thread(target=self._validar_em_thread, daemon=True).start()
+
     # ── Ações ─────────────────────────────────────────────────────────────────
 
     def _selecionar_arquivo(self):
@@ -766,6 +938,15 @@ class ValidadorApp(ctk.CTk):
             font=ctk.CTkFont(size=11),
         )
         self._zona_drop.configure(border_color=COR_CINZA)
+        # Limpa estado do log
+        self._atos_log = []
+        self._arquivo_log = None
+        self._dados_log_ato = None
+        self._btn_atos.clear()
+        self._lbl_log.configure(text="Nenhum log carregado", text_color=COR_CINZA)
+        for widget in self._frame_lista_atos.winfo_children():
+            widget.destroy()
+        self._frame_lista_atos.pack_forget()
         self._lbl_resumo_erros.configure(text="")
         self._lbl_resumo_avisos.configure(text="")
         self._lbl_resumo_ok.configure(text="")
@@ -787,24 +968,35 @@ class ValidadorApp(ctk.CTk):
             self._mostrar_erro_inline("Aguarde — os manuais ainda estão sendo carregados...")
             return
 
+        self._dados_log_ato = None
+        for btn in self._btn_atos:
+            btn.configure(fg_color="transparent", text_color=COR_TEXTO)
+
         self._validando = True
         self._btn_validar.configure(text="⏳  Validando...", state="disabled")
         threading.Thread(target=self._validar_em_thread, daemon=True).start()
 
     def _validar_em_thread(self):
         """Roda a validação em thread separada para não travar a UI."""
-        try:
-            with open(self._arquivo_json, encoding="utf-8") as f:
-                dados = json.load(f)
-        except json.JSONDecodeError as e:
-            self.after(0, self._exibir_erro_json, str(e))
-            return
-        except Exception as e:
-            self.after(0, self._exibir_erro_json, str(e))
-            return
-
-        sistema = self._var_sistema.get()
-        rel = vs.Relatorio(sistema=sistema, arquivo=str(self._arquivo_json))
+        if self._dados_log_ato is not None:
+            dados = {k: v for k, v in self._dados_log_ato.items() if not k.startswith("_")}
+            ato = self._dados_log_ato
+            label = _label_ato(ato)
+            nome_ref = f"{self._arquivo_log.name if self._arquivo_log else 'log'} — {label}"
+            sistema = self._var_sistema.get()
+            rel = vs.Relatorio(sistema=sistema, arquivo=nome_ref)
+        else:
+            try:
+                with open(self._arquivo_json, encoding="utf-8") as f:
+                    dados = json.load(f)
+            except json.JSONDecodeError as e:
+                self.after(0, self._exibir_erro_json, str(e))
+                return
+            except Exception as e:
+                self.after(0, self._exibir_erro_json, str(e))
+                return
+            sistema = self._var_sistema.get()
+            rel = vs.Relatorio(sistema=sistema, arquivo=str(self._arquivo_json))
 
         if sistema == "CEP":
             vs.validar_cep_json(dados, rel)
