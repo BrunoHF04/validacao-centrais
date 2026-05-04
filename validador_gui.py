@@ -11,6 +11,7 @@ import sys
 import threading
 import tkinter as tk
 import tkinter.filedialog as fd
+import tkinter.ttk as ttk
 from datetime import datetime
 from pathlib import Path
 
@@ -333,6 +334,7 @@ class ValidadorApp(ctk.CTk):
         self._validando = False
         self._dados_atuais: dict | None = None
         self._tree_paths: dict = {}
+        self._modo_estrutura: str = "graph"
 
         # ── Estado do modo log ────────────────────────────────────────────────
         self._atos_log: list = []
@@ -813,37 +815,122 @@ class ValidadorApp(ctk.CTk):
     _ROW_GAP  = 10    # espaço vertical entre cards irmãos
 
     def _criar_tree_view(self, parent):
-        wrapper = tk.Frame(parent, bg="#0D1117")
-        wrapper.pack(fill="both", expand=True)
-        self._canvas = tk.Canvas(wrapper, bg="#0D1117", highlightthickness=0)
-        vsb = tk.Scrollbar(wrapper, orient="vertical",   command=self._canvas.yview)
-        hsb = tk.Scrollbar(wrapper, orient="horizontal", command=self._canvas.xview)
-        self._canvas.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-        vsb.pack(side="right",  fill="y")
-        hsb.pack(side="bottom", fill="x")
+        # ── Barra de toggle Graph / Tree ─────────────────────────────────────
+        barra = tk.Frame(parent, bg=COR_CARD, height=34)
+        barra.pack(fill="x")
+        barra.pack_propagate(False)
+
+        self._btn_modo_graph = ctk.CTkButton(
+            barra, text="⬡  Graph", width=90, height=26,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            fg_color=COR_BORDA, hover_color="#C0392B", text_color="white",
+            corner_radius=6, command=lambda: self._trocar_modo_estrutura("graph"),
+        )
+        self._btn_modo_graph.pack(side="left", padx=(8, 4), pady=4)
+
+        self._btn_modo_tree = ctk.CTkButton(
+            barra, text="≡  Tree", width=80, height=26,
+            font=ctk.CTkFont(size=11),
+            fg_color=COR_CARD, hover_color="#3A3A3A", text_color=COR_CINZA,
+            border_width=1, border_color=COR_CINZA, corner_radius=6,
+            command=lambda: self._trocar_modo_estrutura("tree"),
+        )
+        self._btn_modo_tree.pack(side="left", padx=4, pady=4)
+
+        # ── Frame do Graph (canvas) ───────────────────────────────────────────
+        self._frame_graph = tk.Frame(parent, bg="#0D1117")
+        self._frame_graph.pack(fill="both", expand=True)
+
+        self._canvas = tk.Canvas(self._frame_graph, bg="#0D1117", highlightthickness=0)
+        vsb_g = tk.Scrollbar(self._frame_graph, orient="vertical",   command=self._canvas.yview)
+        hsb_g = tk.Scrollbar(self._frame_graph, orient="horizontal", command=self._canvas.xview)
+        self._canvas.configure(yscrollcommand=vsb_g.set, xscrollcommand=hsb_g.set)
+        vsb_g.pack(side="right",  fill="y")
+        hsb_g.pack(side="bottom", fill="x")
         self._canvas.pack(fill="both", expand=True)
         self._canvas.bind("<MouseWheel>",
             lambda e: self._canvas.yview_scroll(-1 if e.delta > 0 else 1, "units"))
         self._canvas.bind("<Shift-MouseWheel>",
             lambda e: self._canvas.xview_scroll(-1 if e.delta > 0 else 1, "units"))
 
+        # ── Frame do Tree (treeview ttk) ──────────────────────────────────────
+        self._frame_tree = tk.Frame(parent, bg=COR_BG)
+
+        style = ttk.Style()
+        try:
+            style.theme_use("default")
+        except Exception:
+            pass
+        style.configure("Json.Treeview",
+            background="#161B22", foreground=COR_TEXTO,
+            fieldbackground="#161B22", borderwidth=0,
+            rowheight=22, font=("Consolas", 10),
+        )
+        style.configure("Json.Treeview.Heading",
+            background=COR_CARD, foreground=COR_TITULO,
+            relief="flat", font=("Consolas", 10, "bold"),
+        )
+        style.map("Json.Treeview",
+            background=[("selected", "#3A3A3A")],
+            foreground=[("selected", COR_BORDA)],
+        )
+
+        self._treeview = ttk.Treeview(
+            self._frame_tree, style="Json.Treeview",
+            show="tree headings", columns=("valor",), selectmode="browse",
+        )
+        self._treeview.heading("#0",     text="Campo", anchor="w")
+        self._treeview.heading("valor",  text="Valor", anchor="w")
+        self._treeview.column("#0",    width=220, minwidth=80, stretch=True)
+        self._treeview.column("valor", width=340, minwidth=80, stretch=True)
+
+        for tag, fg, font in [
+            ("str",      "#CE9178", ("Consolas", 10)),
+            ("num",      "#B5CEA8", ("Consolas", 10)),
+            ("bool",     "#569CD6", ("Consolas", 10)),
+            ("null",     "#808080", ("Consolas", 10)),
+            ("obj",      COR_AVISO, ("Consolas", 10)),
+            ("arr",      COR_AVISO, ("Consolas", 10)),
+            ("erro",     COR_ERRO,  ("Consolas", 10, "bold")),
+            ("erro_pai", "#FF8A80", ("Consolas", 10)),
+            ("aviso",    COR_AVISO, ("Consolas", 10, "bold")),
+            ("av_pai",   "#FFD180", ("Consolas", 10)),
+        ]:
+            self._treeview.tag_configure(tag, foreground=fg, font=font)
+
+        vsb_t = tk.Scrollbar(self._frame_tree, orient="vertical",   command=self._treeview.yview)
+        hsb_t = tk.Scrollbar(self._frame_tree, orient="horizontal", command=self._treeview.xview)
+        self._treeview.configure(yscrollcommand=vsb_t.set, xscrollcommand=hsb_t.set)
+        vsb_t.pack(side="right",  fill="y")
+        hsb_t.pack(side="bottom", fill="x")
+        self._treeview.pack(fill="both", expand=True)
+
     def _popular_tree(self, dados: dict | None,
                       campos_erro: set | None = None,
                       campos_aviso: set | None = None):
         if not hasattr(self, "_canvas"):
             return
-        self._canvas.delete("all")
-        if not dados:
-            return
         ce = campos_erro  or set()
         ca = campos_aviso or set()
-        dados_limpos = {k: v for k, v in dados.items() if not str(k).startswith("_")}
-        root = self._build_json_card("raiz", dados_limpos, "")
-        self._layout_card(root, 16, 16)
-        self._draw_connections(root)
-        self._draw_json_graph(root, ce, ca)
-        self._canvas.update_idletasks()
-        self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        self._last_campos_erro  = ce
+        self._last_campos_aviso = ca
+
+        if self._modo_estrutura == "graph":
+            self._canvas.delete("all")
+            if not dados:
+                return
+            dados_limpos = {k: v for k, v in dados.items() if not str(k).startswith("_")}
+            root = self._build_json_card("raiz", dados_limpos, "")
+            self._layout_card(root, 16, 16)
+            self._draw_connections(root)
+            self._draw_json_graph(root, ce, ca)
+            self._canvas.update_idletasks()
+            self._canvas.configure(scrollregion=self._canvas.bbox("all"))
+        else:
+            if not dados:
+                self._treeview.delete(*self._treeview.get_children())
+                return
+            self._popular_treeview(dados, ce, ca)
 
     # ── Construção dos cards ──────────────────────────────────────────────────
 
@@ -984,6 +1071,86 @@ class ValidadorApp(ctk.CTk):
                                      fill="#30363D", width=1, smooth=True)
         for child in card["children"]:
             self._draw_connections(child)
+
+    # ── Toggle Graph / Tree ───────────────────────────────────────────────────
+
+    def _trocar_modo_estrutura(self, modo: str):
+        self._modo_estrutura = modo
+        if modo == "graph":
+            self._frame_tree.pack_forget()
+            self._frame_graph.pack(fill="both", expand=True)
+            self._btn_modo_graph.configure(fg_color=COR_BORDA, text_color="white",
+                                           border_width=0, font=ctk.CTkFont(size=11, weight="bold"))
+            self._btn_modo_tree.configure(fg_color=COR_CARD, text_color=COR_CINZA,
+                                          border_width=1, border_color=COR_CINZA,
+                                          font=ctk.CTkFont(size=11))
+        else:
+            self._frame_graph.pack_forget()
+            self._frame_tree.pack(fill="both", expand=True)
+            self._btn_modo_tree.configure(fg_color=COR_BORDA, text_color="white",
+                                          border_width=0, font=ctk.CTkFont(size=11, weight="bold"))
+            self._btn_modo_graph.configure(fg_color=COR_CARD, text_color=COR_CINZA,
+                                           border_width=1, border_color=COR_CINZA,
+                                           font=ctk.CTkFont(size=11))
+        if self._dados_atuais:
+            ce = getattr(self, "_last_campos_erro",  set())
+            ca = getattr(self, "_last_campos_aviso", set())
+            self._popular_tree(self._dados_atuais, ce, ca)
+
+    # ── Modo Tree (ttk.Treeview) ──────────────────────────────────────────────
+
+    def _popular_treeview(self, dados: dict, ce: set, ca: set):
+        self._treeview.delete(*self._treeview.get_children())
+        self._tree_paths = {}
+        dados_limpos = {k: v for k, v in dados.items() if not str(k).startswith("_")}
+        self._inserir_no_tree("", "raiz", dados_limpos, "")
+        for child in self._treeview.get_children():
+            self._treeview.item(child, open=True)
+        # Destaque de erros
+        path_nos: dict[str, list] = {}
+        for nid, p in self._tree_paths.items():
+            path_nos.setdefault(p, []).append(nid)
+        for campo in ca:
+            for nid in path_nos.get(campo, []):
+                self._treeview.item(nid, tags=("aviso",))
+                pai = self._treeview.parent(nid)
+                while pai:
+                    if "erro" not in self._treeview.item(pai, "tags"):
+                        self._treeview.item(pai, tags=("av_pai",))
+                    self._treeview.item(pai, open=True)
+                    pai = self._treeview.parent(pai)
+        for campo in ce:
+            for nid in path_nos.get(campo, []):
+                self._treeview.item(nid, tags=("erro",))
+                pai = self._treeview.parent(nid)
+                while pai:
+                    self._treeview.item(pai, tags=("erro_pai",))
+                    self._treeview.item(pai, open=True)
+                    pai = self._treeview.parent(pai)
+
+    def _inserir_no_tree(self, parent: str, chave, valor, path: str):
+        cs = str(chave)
+        if isinstance(valor, dict):
+            no = self._treeview.insert(parent, "end", text=cs,
+                                       values=(f"{{{len(valor)}}}",), tags=("obj",))
+            self._tree_paths[no] = path
+            for k, v in valor.items():
+                if str(k).startswith("_"):
+                    continue
+                self._inserir_no_tree(no, k, v, f"{path}.{k}" if path else str(k))
+        elif isinstance(valor, list):
+            no = self._treeview.insert(parent, "end", text=cs,
+                                       values=(f"[{len(valor)}]",), tags=("arr",))
+            self._tree_paths[no] = path
+            for i, v in enumerate(valor):
+                self._inserir_no_tree(no, i, v, f"{path}[{i}]")
+        else:
+            if isinstance(valor, bool):   vs, tag = ("true" if valor else "false"), "bool"
+            elif valor is None:           vs, tag = "null", "null"
+            elif isinstance(valor, str):  vs, tag = f'"{valor}"', "str"
+            else:                         vs, tag = str(valor), "num"
+            no = self._treeview.insert(parent, "end", text=cs, values=(vs,), tags=(tag,))
+            self._tree_paths[no] = path
 
     def _rodape(self):
         rod = ctk.CTkFrame(self, fg_color=COR_CARD, corner_radius=0, height=28)
