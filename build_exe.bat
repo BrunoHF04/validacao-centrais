@@ -34,6 +34,7 @@ python -m PyInstaller ^
     --onefile ^
     --windowed ^
     --name "ValidadorSIGNO" ^
+    --icon "validador_signo.ico" ^
     --add-data "manuais;manuais" ^
     --add-data "exemplos;exemplos" ^
     --add-data "%CTK_PATH%;customtkinter" ^

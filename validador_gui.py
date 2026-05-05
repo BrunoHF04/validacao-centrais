@@ -39,14 +39,19 @@ def _extrair_atos_do_log(caminho_log: Path) -> list:
                 outer = json.loads(rest)
                 entrada_str = outer.get("jsonEntrada", "")
                 sistema = outer.get("tipoComunicacaoSigno", "CEP")
-                if not entrada_str or entrada_str in vistos:
+                if not entrada_str:
                     continue
                 dados = json.loads(entrada_str)
                 dados["_sistema_log"] = sistema
+                # Se o mesmo ato aparecer novamente no log, mantemos a versão
+                # mais recente (que aparece mais abaixo no arquivo).
+                if entrada_str in vistos:
+                    del vistos[entrada_str]
                 vistos[entrada_str] = dados
             except (json.JSONDecodeError, KeyError, ValueError):
                 continue
-    return list(vistos.values())
+    # Última linha do log = ato mais novo. Exibimos do mais novo para o mais antigo.
+    return list(reversed(vistos.values()))
 
 
 def _label_ato(ato: dict) -> str:
@@ -375,7 +380,7 @@ class ValidadorApp(ctk.CTk):
         self._atos_log: list = []
         self._arquivo_log: Path | None = None
         self._dados_log_ato: dict | None = None
-        self._btn_atos: list = []
+        self._btn_atos: list[tuple[int, ctk.CTkButton]] = []
 
         if not hasattr(self, "_tema_claro"):
             self._tema_claro: bool = False
@@ -1598,30 +1603,52 @@ class ValidadorApp(ctk.CTk):
             text=f"✔  {nome}  ({len(atos)} ato(s))", text_color=COR_OK
         )
 
+        grupos: dict[str, list[tuple[int, dict]]] = {"CEP": [], "CESDI": [], "OUTROS": []}
         for i, ato in enumerate(atos):
-            label = _label_ato(ato)
-            btn = ctk.CTkButton(
+            sistema = str(ato.get("_sistema_log", "CEP")).upper().strip()
+            if sistema in ("CEP", "CESDI"):
+                grupos[sistema].append((i, ato))
+            else:
+                grupos["OUTROS"].append((i, ato))
+
+        for titulo in ("CEP", "CESDI", "OUTROS"):
+            itens = grupos[titulo]
+            if not itens:
+                continue
+
+            titulo_txt = "OUTROS" if titulo == "OUTROS" else titulo
+            ctk.CTkLabel(
                 self._frame_lista_atos,
-                text=label,
-                font=ctk.CTkFont(size=11),
+                text=titulo_txt,
+                font=ctk.CTkFont(size=11, weight="bold"),
+                text_color=COR_INFO,
                 anchor="w",
-                fg_color="transparent",
-                hover_color="#3A3A3A",
-                text_color=COR_TEXTO,
-                height=30,
-                corner_radius=6,
-                command=lambda idx=i: self._selecionar_ato(idx),
-            )
-            btn.pack(fill="x", padx=4, pady=2)
-            self._btn_atos.append(btn)
+            ).pack(fill="x", padx=6, pady=(6, 2))
+
+            for idx_original, ato in itens:
+                label = _label_ato(ato)
+                btn = ctk.CTkButton(
+                    self._frame_lista_atos,
+                    text=label,
+                    font=ctk.CTkFont(size=11),
+                    anchor="w",
+                    fg_color="transparent",
+                    hover_color="#3A3A3A",
+                    text_color=COR_TEXTO,
+                    height=30,
+                    corner_radius=6,
+                    command=lambda idx=idx_original: self._selecionar_ato(idx),
+                )
+                btn.pack(fill="x", padx=4, pady=2)
+                self._btn_atos.append((idx_original, btn))
 
         altura = min(len(atos) * 38, 190)
         self._frame_lista_atos.configure(height=altura)
 
     def _selecionar_ato(self, idx: int):
         """Destaca o ato selecionado e dispara validação."""
-        for i, btn in enumerate(self._btn_atos):
-            if i == idx:
+        for idx_btn, btn in self._btn_atos:
+            if idx_btn == idx:
                 btn.configure(fg_color=COR_BORDA, text_color="white")
             else:
                 btn.configure(fg_color="transparent", text_color=COR_TEXTO)
@@ -1697,7 +1724,7 @@ class ValidadorApp(ctk.CTk):
             return
 
         self._dados_log_ato = None
-        for btn in self._btn_atos:
+        for _, btn in self._btn_atos:
             btn.configure(fg_color="transparent", text_color=COR_TEXTO)
 
         self._validando = True
