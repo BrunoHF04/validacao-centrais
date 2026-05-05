@@ -5,6 +5,7 @@ Interface gráfica do Validador SIGNO (CEP / CESDI).
 Usa CustomTkinter para uma aparência moderna.
 """
 
+import csv
 import io
 import json
 import sys
@@ -381,6 +382,9 @@ class ValidadorApp(ctk.CTk):
         self._arquivo_log: Path | None = None
         self._dados_log_ato: dict | None = None
         self._btn_atos: list[tuple[int, ctk.CTkButton]] = []
+        self._status_atos_log: dict[int, str] = {}
+        self._resultados_lote_log: list[dict] = []
+        self._idx_ato_em_validacao: int | None = None
 
         if not hasattr(self, "_tema_claro"):
             self._tema_claro: bool = False
@@ -577,6 +581,52 @@ class ValidadorApp(ctk.CTk):
         )
         self._lbl_log.pack(anchor="w", padx=20, pady=(0, 4))
 
+        self._filtro_ato_var = ctk.StringVar(value="")
+        self._entry_filtro_ato = ctk.CTkEntry(
+            frame,
+            textvariable=self._filtro_ato_var,
+            placeholder_text="Filtrar atos (livro, folha, cpf...)",
+            height=30,
+            fg_color=COR_CARD,
+            border_color=COR_INFO,
+            text_color=COR_TEXTO,
+        )
+        self._entry_filtro_ato.pack(fill="x", padx=16, pady=(0, 4))
+        self._filtro_ato_var.trace_add("write", lambda *_: self._popular_lista_atos())
+
+        acoes_log = ctk.CTkFrame(frame, fg_color="transparent")
+        acoes_log.pack(fill="x", padx=16, pady=(0, 4))
+        acoes_log.grid_columnconfigure(0, weight=1)
+        acoes_log.grid_columnconfigure(1, weight=1)
+
+        self._btn_validar_todos = ctk.CTkButton(
+            acoes_log,
+            text="✔ Validar todos",
+            command=self._validar_todos_atos_log,
+            font=ctk.CTkFont(size=11),
+            fg_color=COR_CARD,
+            hover_color="#3A3A3A",
+            border_width=1,
+            border_color=COR_INFO,
+            text_color=COR_INFO,
+            height=30,
+        )
+        self._btn_validar_todos.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+
+        self._btn_exportar_lote = ctk.CTkButton(
+            acoes_log,
+            text="⬇ Exportar CSV",
+            command=self._exportar_relatorio_lote_csv,
+            font=ctk.CTkFont(size=11),
+            fg_color=COR_CARD,
+            hover_color="#3A3A3A",
+            border_width=1,
+            border_color=COR_INFO,
+            text_color=COR_INFO,
+            height=30,
+        )
+        self._btn_exportar_lote.grid(row=0, column=1, sticky="ew", padx=(4, 0))
+
         self._frame_lista_atos = ctk.CTkScrollableFrame(
             frame,
             fg_color=COR_CARD,
@@ -740,6 +790,9 @@ class ValidadorApp(ctk.CTk):
         self._arquivo_log      = None
         self._dados_log_ato    = None
         self._btn_atos         = []
+        self._status_atos_log  = {}
+        self._resultados_lote_log = []
+        self._idx_ato_em_validacao = None
         self._tabelas_carregadas = tabelas_ok
 
         self.configure(fg_color=COR_BG)
@@ -1582,6 +1635,9 @@ class ValidadorApp(ctk.CTk):
             return
 
         self._atos_log = atos
+        self._status_atos_log = {}
+        self._resultados_lote_log = []
+        self._idx_ato_em_validacao = None
         self._popular_lista_atos()
 
     def _popular_lista_atos(self):
@@ -1599,17 +1655,35 @@ class ValidadorApp(ctk.CTk):
             return
 
         nome = self._arquivo_log.name if self._arquivo_log else "log"
-        self._lbl_log.configure(
-            text=f"✔  {nome}  ({len(atos)} ato(s))", text_color=COR_OK
-        )
+        filtro = (self._filtro_ato_var.get().strip().lower()
+                  if hasattr(self, "_filtro_ato_var") else "")
+
+        self._lbl_log.configure(text=f"✔  {nome}  ({len(atos)} ato(s))", text_color=COR_OK)
 
         grupos: dict[str, list[tuple[int, dict]]] = {"CEP": [], "CESDI": [], "OUTROS": []}
         for i, ato in enumerate(atos):
+            label = _label_ato(ato)
+            if filtro:
+                serializado = json.dumps(ato, ensure_ascii=False).lower()
+                if filtro not in label.lower() and filtro not in serializado:
+                    continue
             sistema = str(ato.get("_sistema_log", "CEP")).upper().strip()
             if sistema in ("CEP", "CESDI"):
                 grupos[sistema].append((i, ato))
             else:
                 grupos["OUTROS"].append((i, ato))
+
+        total_exibido = sum(len(v) for v in grupos.values())
+        if total_exibido == 0:
+            ctk.CTkLabel(
+                self._frame_lista_atos,
+                text="Nenhum ato corresponde ao filtro.",
+                font=ctk.CTkFont(size=11),
+                text_color=COR_CINZA,
+                anchor="w",
+            ).pack(fill="x", padx=8, pady=8)
+            self._frame_lista_atos.configure(height=120)
+            return
 
         for titulo in ("CEP", "CESDI", "OUTROS"):
             itens = grupos[titulo]
@@ -1619,14 +1693,23 @@ class ValidadorApp(ctk.CTk):
             titulo_txt = "OUTROS" if titulo == "OUTROS" else titulo
             ctk.CTkLabel(
                 self._frame_lista_atos,
-                text=titulo_txt,
+                text=f"{titulo_txt} ({len(itens)})",
                 font=ctk.CTkFont(size=11, weight="bold"),
                 text_color=COR_INFO,
                 anchor="w",
             ).pack(fill="x", padx=6, pady=(6, 2))
 
             for idx_original, ato in itens:
-                label = _label_ato(ato)
+                status = self._status_atos_log.get(idx_original, "pendente")
+                if status == "ok":
+                    prefixo = "✔ "
+                elif status == "erro":
+                    prefixo = "✘ "
+                elif status == "aviso":
+                    prefixo = "⚠ "
+                else:
+                    prefixo = "• "
+                label = prefixo + _label_ato(ato)
                 btn = ctk.CTkButton(
                     self._frame_lista_atos,
                     text=label,
@@ -1642,7 +1725,7 @@ class ValidadorApp(ctk.CTk):
                 btn.pack(fill="x", padx=4, pady=2)
                 self._btn_atos.append((idx_original, btn))
 
-        altura = min(len(atos) * 38, 190)
+        altura = min(max(4, total_exibido) * 38, 230)
         self._frame_lista_atos.configure(height=altura)
 
     def _selecionar_ato(self, idx: int):
@@ -1656,12 +1739,110 @@ class ValidadorApp(ctk.CTk):
         self._dados_log_ato = self._atos_log[idx]
         sistema = self._dados_log_ato.get("_sistema_log", "CEP")
         self._var_sistema.set(sistema)
+        self._idx_ato_em_validacao = idx
 
         if self._validando:
             return
         self._validando = True
         self._btn_validar.configure(text="⏳  Validando...", state="disabled")
         threading.Thread(target=self._validar_em_thread, daemon=True).start()
+
+    def _validar_todos_atos_log(self):
+        if self._validando:
+            return
+        if not self._atos_log:
+            self._mostrar_erro_inline("Importe um arquivo de log antes de validar em lote.")
+            return
+        if not self._tabelas_carregadas:
+            self._mostrar_erro_inline("Aguarde — os manuais ainda estão sendo carregados...")
+            return
+
+        self._validando = True
+        self._btn_validar.configure(text="⏳  Validando...", state="disabled")
+        self._btn_validar_todos.configure(text="⏳ Validando lote...", state="disabled")
+        self._resultados_lote_log = []
+        threading.Thread(target=self._validar_todos_atos_log_thread, daemon=True).start()
+
+    def _validar_todos_atos_log_thread(self):
+        resultados: list[dict] = []
+        for idx, ato in enumerate(self._atos_log):
+            dados = {k: v for k, v in ato.items() if not str(k).startswith("_")}
+            sistema = str(ato.get("_sistema_log", "CEP")).upper()
+            label = _label_ato(ato)
+            nome_ref = f"{self._arquivo_log.name if self._arquivo_log else 'log'} — {label}"
+            rel = vs.Relatorio(sistema=sistema, arquivo=nome_ref)
+            try:
+                if sistema == "CEP":
+                    vs.validar_cep_json(dados, rel)
+                else:
+                    vs.validar_cesdi_json(dados, rel)
+            except Exception as exc:
+                rel.erro("validacao", f"Erro interno na validação: {exc}")
+
+            if rel.erros:
+                status = "erro"
+            elif rel.avisos:
+                status = "aviso"
+            else:
+                status = "ok"
+            resultados.append({
+                "idx": idx,
+                "sistema": sistema,
+                "ato": label,
+                "erros": len(rel.erros),
+                "avisos": len(rel.avisos),
+                "ok": len(rel.ok),
+                "status": status,
+                "arquivo": rel.arquivo,
+            })
+
+        self.after(0, self._on_validacao_lote_concluida, resultados)
+
+    def _on_validacao_lote_concluida(self, resultados: list[dict]):
+        self._resultados_lote_log = resultados
+        self._status_atos_log = {r["idx"]: r["status"] for r in resultados}
+        self._popular_lista_atos()
+
+        total = len(resultados)
+        erros = sum(1 for r in resultados if r["status"] == "erro")
+        avisos = sum(1 for r in resultados if r["status"] == "aviso")
+        ok = sum(1 for r in resultados if r["status"] == "ok")
+        self._mostrar_erro_inline(
+            f"Lote concluído: {total} ato(s) — {erros} com erro, {avisos} com aviso, {ok} OK."
+        )
+
+        self._btn_validar.configure(text="▶  VALIDAR", state="normal")
+        self._btn_validar_todos.configure(text="✔ Validar todos", state="normal")
+        self._validando = False
+
+    def _exportar_relatorio_lote_csv(self):
+        if not self._resultados_lote_log:
+            self._mostrar_erro_inline("Valide os atos em lote antes de exportar o CSV.")
+            return
+        sugestao = "relatorio_lote_log.csv"
+        caminho = fd.asksaveasfilename(
+            title="Salvar relatório do lote",
+            defaultextension=".csv",
+            initialfile=sugestao,
+            filetypes=[("CSV", "*.csv"), ("Todos os arquivos", "*.*")],
+        )
+        if not caminho:
+            return
+        try:
+            with open(caminho, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.writer(f, delimiter=";")
+                w.writerow([
+                    "indice", "sistema", "ato", "status",
+                    "qtd_erros", "qtd_avisos", "qtd_ok",
+                ])
+                for r in self._resultados_lote_log:
+                    w.writerow([
+                        r["idx"], r["sistema"], r["ato"], r["status"],
+                        r["erros"], r["avisos"], r["ok"],
+                    ])
+            self._lbl_log.configure(text=f"✔ CSV exportado: {Path(caminho).name}", text_color=COR_OK)
+        except Exception as exc:
+            self._mostrar_erro_inline(f"Falha ao exportar CSV: {exc}")
 
     # ── Ações ─────────────────────────────────────────────────────────────────
 
@@ -1691,8 +1872,15 @@ class ValidadorApp(ctk.CTk):
         self._atos_log = []
         self._arquivo_log = None
         self._dados_log_ato = None
+        self._idx_ato_em_validacao = None
+        self._status_atos_log = {}
+        self._resultados_lote_log = []
         self._btn_atos.clear()
         self._lbl_log.configure(text="Nenhum log carregado", text_color=COR_CINZA)
+        if hasattr(self, "_filtro_ato_var"):
+            self._filtro_ato_var.set("")
+        if hasattr(self, "_btn_validar_todos"):
+            self._btn_validar_todos.configure(text="✔ Validar todos", state="normal")
         for widget in self._frame_lista_atos.winfo_children():
             widget.destroy()
         self._frame_lista_atos.configure(height=0)
@@ -1724,6 +1912,7 @@ class ValidadorApp(ctk.CTk):
             return
 
         self._dados_log_ato = None
+        self._idx_ato_em_validacao = None
         for _, btn in self._btn_atos:
             btn.configure(fg_color="transparent", text_color=COR_TEXTO)
 
@@ -1733,6 +1922,7 @@ class ValidadorApp(ctk.CTk):
 
     def _validar_em_thread(self):
         """Roda a validação em thread separada para não travar a UI."""
+        idx_validado = self._idx_ato_em_validacao
         if self._dados_log_ato is not None:
             dados = {k: v for k, v in self._dados_log_ato.items() if not k.startswith("_")}
             ato = self._dados_log_ato
@@ -1759,7 +1949,7 @@ class ValidadorApp(ctk.CTk):
             vs.validar_cesdi_json(dados, rel)
 
         self._dados_atuais = dados
-        self.after(0, self._exibir_relatorio, rel)
+        self.after(0, self._exibir_relatorio, rel, idx_validado)
 
     # ── Exibição dos resultados ───────────────────────────────────────────────
 
@@ -1776,7 +1966,7 @@ class ValidadorApp(ctk.CTk):
             self._append("ok",     "  [OK]     Campo validado com sucesso\n", txt)
             txt.configure(state="disabled")
 
-    def _exibir_relatorio(self, rel: vs.Relatorio):
+    def _exibir_relatorio(self, rel: vs.Relatorio, idx_validado: int | None = None):
         for txt in (self._txt_resultado, self._txt_tecnico):
             txt.configure(state="normal")
             txt.delete("1.0", "end")
@@ -1878,11 +2068,22 @@ class ValidadorApp(ctk.CTk):
         self._lbl_resumo_avisos.configure(text=f"  {icone_a}  {len(rel.avisos)} aviso(s)")
         self._lbl_resumo_ok.configure(text=f"  ✔  {len(rel.ok)} campo(s) OK")
 
+        if idx_validado is not None:
+            if rel.erros:
+                self._status_atos_log[idx_validado] = "erro"
+            elif rel.avisos:
+                self._status_atos_log[idx_validado] = "aviso"
+            else:
+                self._status_atos_log[idx_validado] = "ok"
+            self._popular_lista_atos()
+
         campos_erro  = {c for c, _ in rel.erros}
         campos_aviso = {c for c, _ in rel.avisos}
         self._popular_tree(self._dados_atuais, campos_erro, campos_aviso)
 
         self._btn_validar.configure(text="▶  VALIDAR", state="normal")
+        if hasattr(self, "_btn_validar_todos"):
+            self._btn_validar_todos.configure(text="✔ Validar todos", state="normal")
         self._validando = False
 
     def _exibir_erro_json(self, mensagem: str):
@@ -1894,6 +2095,8 @@ class ValidadorApp(ctk.CTk):
             self._append("cinza", "  Verifique se o arquivo é um JSON válido e tente novamente.\n", txt)
             txt.configure(state="disabled")
         self._btn_validar.configure(text="▶  VALIDAR", state="normal")
+        if hasattr(self, "_btn_validar_todos"):
+            self._btn_validar_todos.configure(text="✔ Validar todos", state="normal")
         self._validando = False
 
     def _mostrar_erro_inline(self, msg: str):
